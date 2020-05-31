@@ -6,7 +6,6 @@ import randombytes from 'https://deno.land/x/npm:randombytes@2.1.0/browser.js';
 import speedometer from 'https://deno.land/x/npm:speedometer@1.1.0/index.js';
 import stream from 'https://deno.land/x/npm:readable-stream@3.6.0/readable.js';
 import { Extension, ExtendedHandshake } from './Extension.ts';
-import { throws } from 'assert DENOIFY: DEPENDENCY UNMET (BUILTIN)';
 
 const debug = debugNs('bittorrent-protocol');
 
