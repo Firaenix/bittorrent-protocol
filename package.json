@@ -53,6 +53,8 @@
   "types": "./lib/index.d.ts",
   "files": [
     "./lib",
+    "./deno_lib/",
+    "mod.ts",
     "package.json"
   ],
   "repository": {
