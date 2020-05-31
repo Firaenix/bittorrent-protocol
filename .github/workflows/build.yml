@@ -6,20 +6,20 @@ name: Test-And-Publish
 on:
   push:
     branches: [master]
-    paths: 
-      - "/**/*.ts"
-      - "/**/*.js"
-      - "package.json"
-      - "yarn.lock"
-      - "tsconfig*.json"
+    paths:
+      - '**/*.ts'
+      - '**/*.js'
+      - 'package.json'
+      - 'yarn.lock'
+      - 'tsconfig*.json'
   pull_request:
     branches: [master]
-    paths: 
-      - "**/*.ts"
-      - "**/*.js"
-      - "package.json"
-      - "yarn.lock"
-      - "tsconfig*.json"
+    paths:
+      - '**/*.ts'
+      - '**/*.js'
+      - 'package.json'
+      - 'yarn.lock'
+      - 'tsconfig*.json'
 
 jobs:
   test:
