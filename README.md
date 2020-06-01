@@ -4,8 +4,6 @@
 
 Node.js implementation of the [BitTorrent peer wire protocol](https://wiki.theory.org/BitTorrentSpecification#Peer_wire_protocol_.28TCP.29). The protocol is the main communication layer for BitTorrent file transfer.
 
-Also works in the browser with [browserify](http://browserify.org/)! This module is used by [WebTorrent](http://webtorrent.io).
-
 ## Changes made
 
 - Converted to typescript
@@ -14,6 +12,10 @@ Also works in the browser with [browserify](http://browserify.org/)! This module
 ## TODO
 
 - Ensure full handshake + extended handshake happens before allowing data to be requested.
+- Allow metainfo files and magnet links to specify the hashing algorithm used for an infohash.
+- (Maybe) Satisfy ![BEP30](http://bittorrent.org/beps/bep_0030.html) and allow Merkel hashes instead of pieces in a torrent file.
+- Torrent Signing ![BEP35](http://bittorrent.org/beps/bep_0035.html)
+- Mutable Torrents via URL (![BEP39](http://bittorrent.org/beps/bep_0039.html)) or DHT (![BEP46](http://bittorrent.org/beps/bep_0046.html))
 
 ## install
 
