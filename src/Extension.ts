@@ -1,6 +1,5 @@
 import Wire from './Wire';
 import { IExtension } from './models/IExtension';
-import { IWire } from './models/IWire';
 
 export type ExtendedHandshakeMessageParams = { [key: string]: any };
 
