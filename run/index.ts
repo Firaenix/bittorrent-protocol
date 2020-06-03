@@ -24,7 +24,7 @@ class NewExtension extends Extension {
 }
 
 outgoingWire.pipe(incomingWire).pipe(outgoingWire);
-
+outgoingWire.use(NewExtension);
 incomingWire.use(NewExtension);
 
 incomingWire.on('handshake', (...data: unknown[]) => {
@@ -34,6 +34,13 @@ incomingWire.on('handshake', (...data: unknown[]) => {
 
 outgoingWire.on('handshake', (...data: unknown[]) => {
   console.log('{outgoingWire} Incoming handshake', data);
+  outgoingWire.request(1, 2, 40, (...args: any[]) => {
+    console.log('Requesting', args);
+  });
+});
+
+incomingWire.on('request', (...args: any[]) => {
+  console.log('Peer requested data', args);
 });
 
 incomingWire.on('destroy-required-extension', (reason: string) => {

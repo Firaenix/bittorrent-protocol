@@ -1,4 +1,6 @@
 import Wire from './Wire';
+import { IExtension } from './models/IExtension';
+import { IWire } from './models/IWire';
 
 export type ExtendedHandshakeMessageParams = { [key: string]: any };
 
@@ -10,16 +12,6 @@ export type ExtendedHandshake = {
 } & ExtendedHandshakeMessageParams;
 
 export type HandshakeExtensions = { [name: string]: boolean };
-
-export interface IExtension {
-  wire: Wire;
-  name: string;
-  requirePeer?: boolean;
-
-  onHandshake: (infoHash: string, peerId: string, extensions: HandshakeExtensions) => void;
-  onExtendedHandshake: (handshake: ExtendedHandshake) => void;
-  onMessage: (buf: Buffer) => void;
-}
 
 export abstract class Extension implements IExtension {
   public wire: Wire;

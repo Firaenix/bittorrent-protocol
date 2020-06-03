@@ -6,22 +6,12 @@ import randombytes from 'randombytes';
 import speedometer from 'speedometer';
 import stream from 'readable-stream';
 import { Extension, ExtendedHandshake } from './Extension';
-import { throws } from 'assert';
+import { MESSAGE_KEEP_ALIVE, MESSAGE_RESERVED, MESSAGE_PROTOCOL, MESSAGE_CHOKE, MESSAGE_UNCHOKE, MESSAGE_INTERESTED, MESSAGE_UNINTERESTED, MESSAGE_PORT } from './models/PeerMessages';
 
 const debug = debugNs('bittorrent-protocol');
 
 const BITFIELD_GROW = 400000;
 const KEEP_ALIVE_TIMEOUT = 55000;
-
-const MESSAGE_PROTOCOL = Buffer.from('\u0013BitTorrent protocol');
-const MESSAGE_KEEP_ALIVE = Buffer.from([0x00, 0x00, 0x00, 0x00]);
-const MESSAGE_CHOKE = Buffer.from([0x00, 0x00, 0x00, 0x01, 0x00]);
-const MESSAGE_UNCHOKE = Buffer.from([0x00, 0x00, 0x00, 0x01, 0x01]);
-const MESSAGE_INTERESTED = Buffer.from([0x00, 0x00, 0x00, 0x01, 0x02]);
-const MESSAGE_UNINTERESTED = Buffer.from([0x00, 0x00, 0x00, 0x01, 0x03]);
-
-const MESSAGE_RESERVED = [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00];
-const MESSAGE_PORT = [0x00, 0x00, 0x00, 0x03, 0x09, 0x00, 0x00];
 
 export type ExtensionsMap = { [x: string]: boolean; dht: boolean; extended: boolean };
 
@@ -77,6 +67,8 @@ export default class Wire extends stream.Duplex {
   public _timeoutUnref: unknown;
   public _handshakeSent: boolean;
   public _extendedHandshakeSent: boolean;
+  public _handshakeSuccess = false;
+  public _extendedHandshakeSuccess = false;
   public wireName: string | undefined;
 
   constructor(name?: string) {
@@ -376,6 +368,8 @@ export default class Wire extends stream.Duplex {
     if (!cb) cb = () => {};
     if (this._finished) return cb(new Error('wire is closed'));
     if (this.peerChoking) return cb(new Error('peer is choking'));
+    if (this._handshakeSuccess) return cb(new Error(`peer hasn't finished handshaking`));
+    if (this._extendedHandshakeSuccess) return cb(new Error(`peer hasn't finished extended handshaking`));
 
     this._debug('request index=%d offset=%d length=%d', index, offset, length);
 
@@ -499,6 +493,7 @@ export default class Wire extends stream.Duplex {
       // outgoing connection
       this._sendExtendedHandshake();
     }
+    this._handshakeSuccess = true;
   }
 
   private _onChoke() {
@@ -629,6 +624,8 @@ export default class Wire extends stream.Duplex {
       this._debug('got extended message ext=%s', ext);
       this.emit('extended', ext, buf);
     }
+
+    this._extendedHandshakeSuccess = true;
   }
 
   private _onTimeout() {
@@ -753,16 +750,19 @@ export default class Wire extends stream.Duplex {
       const pstrlen = buffer.readUInt8(0);
       this._parse(pstrlen + 48, (handshake) => {
         const protocol = handshake.slice(0, pstrlen);
+
         if (protocol.toString() !== 'BitTorrent protocol') {
           this._debug('Error: wire not speaking BitTorrent protocol (%s)', protocol.toString());
           this.end();
           return;
         }
         handshake = handshake.slice(pstrlen);
+
         this._onHandshake(handshake.slice(8, 28), handshake.slice(28, 48), {
           dht: !!(handshake[7] & 0x01), // see bep_0005
           extended: !!(handshake[5] & 0x10) // see bep_0010
         });
+
         this._parse(4, this._onMessageLength);
       });
     });
