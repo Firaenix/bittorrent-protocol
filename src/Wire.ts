@@ -366,10 +366,18 @@ export default class Wire extends stream.Duplex {
    */
   public request(index: number, offset: number, length: number, cb: Function) {
     if (!cb) cb = () => {};
-    if (this._finished) return cb(new Error('wire is closed'));
-    if (this.peerChoking) return cb(new Error('peer is choking'));
-    if (this._handshakeSuccess) return cb(new Error(`peer hasn't finished handshaking`));
-    if (this._extendedHandshakeSuccess) return cb(new Error(`peer hasn't finished extended handshaking`));
+    if (this._finished) {
+      return cb(new Error('wire is closed'));
+    }
+    if (this.peerChoking) {
+      return cb(new Error('peer is choking'));
+    }
+    if (this._handshakeSuccess === false) {
+      return cb(new Error(`peer hasn't finished handshaking`));
+    }
+    if (this._nextExt > 1 && this._extendedHandshakeSuccess === false) {
+      return cb(new Error(`peer hasn't finished extended handshaking`));
+    }
 
     this._debug('request index=%d offset=%d length=%d', index, offset, length);
 

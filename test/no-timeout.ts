@@ -12,6 +12,7 @@ test('No timeout when peer is good', (t) => {
   wire.pipe(wire);
   wire.setTimeout(1000);
   wire.handshake(Buffer.from('01234567890123456789'), Buffer.from('12345678901234567890'));
+  console.log('wire extes', wire._nextExt);
 
   wire.on('unchoke', () => {
     wire.request(0, 0, 11, (err) => {
