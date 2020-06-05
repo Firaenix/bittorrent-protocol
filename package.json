@@ -1,0 +1,72 @@
+{
+  "name": "@firaenix/bittorrent-protocol",
+  "description": "Simple, robust, BitTorrent peer wire protocol implementation",
+  "version": "3.2.16",
+  "author": {
+    "name": "Firaenix",
+    "email": "Nick.Carton@gmail.com"
+  },
+  "bugs": {
+    "url": "https://github.com/firaenix/bittorrent-protocol/issues"
+  },
+  "dependencies": {
+    "bencode": "^2.0.0",
+    "bitfield": "^3.0.0",
+    "bsv": "^1.5.3",
+    "debug": "^4.1.1",
+    "randombytes": "^2.0.5",
+    "readable-stream": "^3.0.0",
+    "speedometer": "^1.0.0",
+    "unordered-array-remove": "^1.0.2"
+  },
+  "devDependencies": {
+    "@types/bencode": "^2.0.0",
+    "@types/debug": "^4.1.5",
+    "@types/node": "^14.0.6",
+    "@types/readable-stream": "^2.3.6",
+    "@types/tape": "^4.13.0",
+    "@typescript-eslint/eslint-plugin": "^2.29.0",
+    "@typescript-eslint/parser": "^2.29.0",
+    "browserify": "^16.5.1",
+    "eslint": "^7.1.0",
+    "eslint-config-prettier": "^6.11.0",
+    "eslint-plugin-prettier": "^3.1.3",
+    "prettier": "^2.0.5",
+    "standard": "*",
+    "tape": "^4.0.0",
+    "ts-node": "^8.10.2",
+    "typescript": "^3.9.3"
+  },
+  "keywords": [
+    "bittorrent",
+    "p2p",
+    "peer",
+    "peer-to-peer",
+    "protocol",
+    "stream",
+    "torrent",
+    "wire"
+  ],
+  "license": "MIT",
+  "main": "./lib/index.js",
+  "module": "./lib/index.min.js",
+  "types": "./lib/index.d.ts",
+  "files": [
+    "./lib",
+    "package.json"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git://github.com/firaenix/bittorrent-protocol.git"
+  },
+  "scripts": {
+    "fix": "eslint --fix ./**/*.ts",
+    "lint": "eslint ./**/*.ts",
+    "test": "ts-node node_modules/tape/bin/tape test/*.ts",
+    "start": "ts-node ./run/index.ts",
+    "build": "tsc && npm run browser",
+    "browser": "browserify lib/index.js -o ./lib/index.min.js",
+    "server": "ts-node ./run/server.ts",
+    "leech": "ts-node ./run/leech.ts"
+  }
+}
