@@ -12,6 +12,7 @@
   "dependencies": {
     "bencode": "^2.0.0",
     "bitfield": "^3.0.0",
+    "bsv": "^1.5.3",
     "debug": "^4.1.1",
     "randombytes": "^2.0.5",
     "readable-stream": "^3.0.0",
@@ -64,6 +65,8 @@
     "test": "ts-node node_modules/tape/bin/tape test/*.ts",
     "start": "ts-node ./run/index.ts",
     "build": "tsc && npm run browser",
-    "browser": "browserify lib/index.js -o ./lib/index.min.js"
+    "browser": "browserify lib/index.js -o ./lib/index.min.js",
+    "server": "ts-node ./run/server.ts",
+    "leech": "ts-node ./run/leech.ts"
   }
 }

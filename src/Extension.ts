@@ -1,5 +1,5 @@
 import Wire from './Wire';
-import { IExtension } from './models/IExtension';
+import { IExtension, ExtensionExtraFields } from './models/IExtension';
 
 export type ExtendedHandshakeMessageParams = { [key: string]: any };
 
@@ -8,6 +8,9 @@ export type ExtendedHandshakeMessageParams = { [key: string]: any };
  */
 export type ExtendedHandshake = {
   m?: { [name: string]: number };
+  exts: {
+    [extName: string]: ExtensionExtraFields;
+  };
 } & ExtendedHandshakeMessageParams;
 
 export type HandshakeExtensions = { [name: string]: boolean };
@@ -16,6 +19,7 @@ export abstract class Extension implements IExtension {
   public wire: Wire;
   public abstract name: string;
   public abstract requirePeer?: boolean;
+  public extraFields?: ExtensionExtraFields;
 
   constructor(wire: Wire) {
     this.wire = wire;

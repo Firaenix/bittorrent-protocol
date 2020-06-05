@@ -293,3 +293,26 @@ If you want to write your own extension, take a look at the [ut_metadata index.j
 ## license
 
 MIT. Copyright (c) [Feross Aboukhadijeh](https://feross.org), Mathias Buus, and [WebTorrent, LLC](https://webtorrent.io).
+
+## Some ideas
+
+```
+{
+  "announce": [], // the URL of the tracker
+  "info": { // this maps to a dictionary whose keys are dependent on whether one or more files are being shared:
+    "files": [{ // a list of dictionaries each corresponding to a file (only when multiple files are being shared). Each dictionary has the following keys:
+      "length": 0, // size of the file in bytes.
+      "path": "./path/to/file" // a list of strings corresponding to subdirectory names, the last of which is the actual file name
+    }],
+    "length": 10, // size of the file in bytes (only when one file is being shared)
+    "name": "example_torrent.zip", // suggested filename where the file is to be saved (if one file)/suggested directory name where the files are to be saved (if multiple files)
+    "piece length": 28, // number of bytes per piece. This is commonly 28 KiB = 256 KiB = 262,144 B.
+    "pieces": ["piecehash"], // a hash list, i.e., a concatenation of each piece's SHA-1 hash. As SHA-1 returns a 160-bit hash, pieces will be a string whose length is a multiple of 20 bytes. If the torrent contains multiple files, the pieces are formed by concatenating the files in the order they appear in the files dictionary (i.e. all pieces in the torrent are the full piece length except for the last piece, which may be shorter).
+    "nodes": [["<host>", "port"], ["<host>", "port"]], // The specification recommends that nodes "should be set to the K closest nodes in the torrent generating client's routing table. Alternatively, the key could be set to a known good node such as one operated by the person generating the torrent."
+    "root hash": "<binary {{ROOT_HASH_ALGO}} hash>", // A torrent file using Merkle trees does not have a pieces key in the info list. Instead, such a torrent file has a root_hash key in the info list. This key's value is the root hash of the Merkle hash.
+    "root hash algo": "BLAKE3" // PROPOSAL: Specify the algorithm used for the root hash
+  },
+  "infoHashSig": "", // PROPOSAL: Signature tied to the hash of the info field
+  "infoHashSigAlgo": "ECDSA" // PROPOSAL: Allow the specification of custom signature algorithms
+}
+```

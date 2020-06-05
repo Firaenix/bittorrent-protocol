@@ -16,7 +16,7 @@ test('Extension.prototype.name', (t) => {
   }
 
   t.throws(() => {
-    wire.use(NoNameExtension);
+    wire.use((w) => new NoNameExtension(w));
   }, 'throws when Extension.name is undefined');
 
   class NamedExtension extends Extension {
@@ -29,7 +29,7 @@ test('Extension.prototype.name', (t) => {
   }
 
   t.doesNotThrow(() => {
-    wire.use(NamedExtension);
+    wire.use((w) => new NamedExtension(w));
   }, 'does not throw when Extension.prototype.name is defined');
 });
 
@@ -58,7 +58,7 @@ test('Extension.onHandshake', (t) => {
   });
   wire.pipe(wire);
 
-  wire.use(TestExtension);
+  wire.use((w) => new TestExtension(w));
 
   wire.handshake(Buffer.from('01234567890123456789'), Buffer.from('12345678901234567890'), undefined);
 });
@@ -69,13 +69,12 @@ test('Extension.onExtendedHandshake', (t) => {
   class TestExtension extends Extension {
     public name = 'test_extension';
     public requirePeer = undefined;
+    public extraFields = {
+      hello: Buffer.from('world!')
+    };
 
     constructor(wire: Wire) {
       super(wire);
-
-      wire.extendedHandshake = {
-        hello: 'world!'
-      };
     }
 
     public onHandshake: (infoHash: string, peerId: string, extensions: HandshakeExtensions) => void;
@@ -83,7 +82,8 @@ test('Extension.onExtendedHandshake', (t) => {
     public onExtendedHandshake = (handshake: ExtendedHandshake): void => {
       t.ok(handshake.m, 'm field should be populated in Extended handshake');
       t.ok(handshake.m?.test_extension, 'peer extended handshake includes extension name');
-      t.equal(handshake.hello.toString(), 'world!', 'peer extended handshake includes extension-defined parameters');
+      console.log(handshake);
+      t.equal(handshake.exts['test_extension'].hello.toString(), 'world!', 'peer extended handshake includes extension-defined parameters');
     };
 
     public onMessage: (buf: Buffer) => void;
@@ -100,7 +100,7 @@ test('Extension.onExtendedHandshake', (t) => {
     t.equal(extensions.extended, true);
   });
 
-  wire.use(TestExtension);
+  wire.use((w) => new TestExtension(w));
 
   wire.handshake('3031323334353637383930313233343536373839', '3132333435363738393031323334353637383930', undefined);
 });
@@ -124,7 +124,7 @@ test('Wire destroyed on Extension with requirePeer true', (t) => {
 
   outgoingWire.pipe(incomingWire).pipe(outgoingWire);
 
-  incomingWire.use(TestExtension);
+  incomingWire.use((w) => new TestExtension(w));
 
   incomingWire.on('handshake', (...data: unknown[]) => {
     incomingWire.handshake('4444444444444444444430313233343536373839', '4444444444444444444430313233343536373839');
@@ -159,11 +159,47 @@ test('Extension.onMessage', (t) => {
   });
   wire.pipe(wire);
 
-  wire.use(TestExtension);
+  wire.use((w) => new TestExtension(w));
 
   wire.handshake('3031323334353637383930313233343536373839', '3132333435363738393031323334353637383930', undefined);
 
   wire.once('extended', () => {
     wire.extended('test_extension', Buffer.from('hello world!'));
   });
+});
+
+test('Throws error when connection not finished handshake if piece requested', (t) => {
+  t.plan(3);
+
+  const wire = new Wire();
+  wire.on('error', (err) => {
+    t.fail(err);
+  });
+  wire.pipe(wire);
+  wire.handshake(Buffer.from('01234567890123456789'), Buffer.from('12345678901234567890'));
+
+  wire.on('unchoke', () => {
+    wire.request(0, 0, 11, (err) => {
+      t.error(err);
+    });
+
+    wire.request(0, 0, 11, (err) => {
+      t.error(err);
+    });
+
+    wire.request(0, 0, 11, (err) => {
+      t.error(err);
+    });
+  });
+
+  wire.on('request', (i, offset, length, callback) => {
+    callback(null, Buffer.from('hello world'));
+  });
+
+  // there should never be a timeout
+  wire.on('timeout', () => {
+    t.fail('Timed out');
+  });
+
+  wire.unchoke();
 });

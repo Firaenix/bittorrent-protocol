@@ -6,9 +6,9 @@ import randombytes from 'randombytes';
 import speedometer from 'speedometer';
 import stream from 'readable-stream';
 import { Extension, ExtendedHandshake } from './Extension';
-import { MESSAGE_KEEP_ALIVE, MESSAGE_RESERVED, MESSAGE_PROTOCOL, MESSAGE_CHOKE, MESSAGE_UNCHOKE, MESSAGE_INTERESTED, MESSAGE_UNINTERESTED, MESSAGE_PORT } from './models/PeerMessages';
+import { MessageBuffers, MessageFlags } from './models/PeerMessages';
 
-const debug = debugNs('firaenix/bittorrent-protocol');
+const debug = debugNs('firaenix-bittorrent-protocol');
 
 const BITFIELD_GROW = 400000;
 const KEEP_ALIVE_TIMEOUT = 55000;
@@ -103,9 +103,9 @@ export default class Wire extends stream.Duplex {
 
     // The extended handshake to send, minus the "m" field, which gets automatically
     // filled from `this.extendedMapping`
-    this.extendedHandshake = { m: {} };
+    this.extendedHandshake = { m: {}, exts: {} };
 
-    this.peerExtendedHandshake = { m: {} }; // remote peer's extended handshake
+    this.peerExtendedHandshake = { m: {}, exts: {} }; // remote peer's extended handshake
 
     this._ext = {}; // string -> function, ex 'ut_metadata' -> ut_metadata()
     this._nextExt = 1;
@@ -182,9 +182,9 @@ export default class Wire extends stream.Duplex {
    * Use the specified protocol extension.
    * @param  {function} Extension
    */
-  public use(newExtension: new (wire: Wire) => Extension): void {
+  public use(newExtension: (wire: Wire) => Extension): void {
     const ext = this._nextExt;
-    const handler = new newExtension(this);
+    const handler = newExtension(this);
 
     const name = handler.name;
     if (!name) {
@@ -222,7 +222,7 @@ export default class Wire extends stream.Duplex {
    */
   public keepAlive() {
     this._debug('keep-alive');
-    this._push(MESSAGE_KEEP_ALIVE);
+    this._push(MessageBuffers.MESSAGE_KEEP_ALIVE);
   }
 
   /**
@@ -254,14 +254,14 @@ export default class Wire extends stream.Duplex {
 
     this._debug('handshake i=%s p=%s exts=%o', infoHash, peerId, extensions);
 
-    const reserved = Buffer.from(MESSAGE_RESERVED);
+    const reserved = Buffer.from(MessageBuffers.MESSAGE_RESERVED);
 
     // enable extended message
     reserved[5] |= 0x10;
 
     if (extensions && extensions.dht) reserved[7] |= 1;
 
-    this._push(Buffer.concat([MESSAGE_PROTOCOL, reserved, infoHashBuffer, peerIdBuffer]));
+    this._push(Buffer.concat([MessageBuffers.MESSAGE_PROTOCOL, reserved, infoHashBuffer, peerIdBuffer]));
     this._handshakeSent = true;
 
     if (this.peerExtensions.extended && !this._extendedHandshakeSent) {
@@ -279,15 +279,28 @@ export default class Wire extends stream.Duplex {
    */
   private _sendExtendedHandshake() {
     // Create extended message object from registered extensions
-    type HandshakeMessage = { m: { [extName: string]: number } };
+    type HandshakeMessage = {
+      m: { [extName: string]: number };
+      exts: {
+        [extName: string]: {
+          [key: string]: Buffer;
+        };
+      };
+    };
+
     const msg: HandshakeMessage = {
       ...Object.assign({}, this.extendedHandshake),
-      m: {}
+      m: {},
+      exts: {}
     };
 
     for (const ext in this.extendedMapping) {
       const name = this.extendedMapping[ext];
+      const extension = this._ext[name];
       msg.m[name] = Number(ext);
+      msg.exts[name] = {
+        ...extension.extraFields
+      };
     }
 
     // Send extended handshake
@@ -305,7 +318,7 @@ export default class Wire extends stream.Duplex {
     while (this.peerRequests.length) {
       this.peerRequests.pop();
     }
-    this._push(MESSAGE_CHOKE);
+    this._push(MessageBuffers.MESSAGE_CHOKE);
   }
 
   /**
@@ -315,7 +328,7 @@ export default class Wire extends stream.Duplex {
     if (!this.amChoking) return;
     this.amChoking = false;
     this._debug('unchoke');
-    this._push(MESSAGE_UNCHOKE);
+    this._push(MessageBuffers.MESSAGE_UNCHOKE);
   }
 
   /**
@@ -325,7 +338,7 @@ export default class Wire extends stream.Duplex {
     if (this.amInterested) return;
     this.amInterested = true;
     this._debug('interested');
-    this._push(MESSAGE_INTERESTED);
+    this._push(MessageBuffers.MESSAGE_INTERESTED);
   }
 
   /**
@@ -335,7 +348,7 @@ export default class Wire extends stream.Duplex {
     if (!this.amInterested) return;
     this.amInterested = false;
     this._debug('uninterested');
-    this._push(MESSAGE_UNINTERESTED);
+    this._push(MessageBuffers.MESSAGE_UNINTERESTED);
   }
 
   /**
@@ -418,7 +431,7 @@ export default class Wire extends stream.Duplex {
    */
   public port(port: number) {
     this._debug('port %d', port);
-    const message = Buffer.from(MESSAGE_PORT);
+    const message = Buffer.from(MessageBuffers.MESSAGE_PORT);
     message.writeUInt16BE(port, 5);
     this._push(message);
   }
@@ -452,7 +465,7 @@ export default class Wire extends stream.Duplex {
   /**
    * Send a message to the remote peer.
    */
-  private _message(id, numbers, data) {
+  private _message(id: number, numbers: number[], data: Buffer | null) {
     const dataLength = data ? data.length : 0;
     const buffer = Buffer.allocUnsafe(5 + 4 * numbers.length);
 
@@ -586,16 +599,19 @@ export default class Wire extends stream.Duplex {
     this.emit('port', port);
   }
 
-  private _onExtended(ext, buf) {
+  private _onExtended(ext: number, buf: Buffer) {
     if (ext === 0) {
       let info: ExtendedHandshake | undefined;
       try {
         info = bencode.decode(buf);
       } catch (err) {
         this._debug('ignoring invalid extended handshake: %s', err.message || err);
+        return;
       }
 
-      if (!info) return;
+      if (!info) {
+        return;
+      }
       this.peerExtendedHandshake = info;
 
       // Find any extensions that require the other peer to have it too.
@@ -623,7 +639,7 @@ export default class Wire extends stream.Duplex {
       this.emit('extended', 'handshake', this.peerExtendedHandshake);
     } else {
       if (this.extendedMapping[ext]) {
-        ext = this.extendedMapping[ext]; // friendly name for extension
+        ext = this.extendedMapping[ext] as any; // friendly name for extension
         if (this._ext[ext]) {
           // there is an registered extension handler, so call it
           this._ext[ext].onMessage(buf);
@@ -724,28 +740,30 @@ export default class Wire extends stream.Duplex {
    */
   private _onMessage(buffer: Buffer) {
     this._parse(4, this._onMessageLength);
-    switch (buffer[0]) {
-      case 0:
+    const messageFlag: MessageFlags = buffer[0];
+
+    switch (messageFlag) {
+      case MessageFlags.Choke:
         return this._onChoke();
-      case 1:
+      case MessageFlags.Unchoke:
         return this._onUnchoke();
-      case 2:
+      case MessageFlags.Interested:
         return this._onInterested();
-      case 3:
+      case MessageFlags.NotInterested:
         return this._onUninterested();
-      case 4:
+      case MessageFlags.Have:
         return this._onHave(buffer.readUInt32BE(1));
-      case 5:
+      case MessageFlags.Bitfield:
         return this._onBitField(buffer.slice(1));
-      case 6:
+      case MessageFlags.Request:
         return this._onRequest(buffer.readUInt32BE(1), buffer.readUInt32BE(5), buffer.readUInt32BE(9));
-      case 7:
+      case MessageFlags.Piece:
         return this._onPiece(buffer.readUInt32BE(1), buffer.readUInt32BE(5), buffer.slice(9));
-      case 8:
+      case MessageFlags.Cancel:
         return this._onCancel(buffer.readUInt32BE(1), buffer.readUInt32BE(5), buffer.readUInt32BE(9));
       case 9:
         return this._onPort(buffer.readUInt16BE(1));
-      case 20:
+      case MessageFlags.Extended:
         return this._onExtended(buffer.readUInt8(1), buffer.slice(2));
       default:
         this._debug('got unknown message');
