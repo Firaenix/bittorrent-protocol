@@ -10,12 +10,11 @@ class NewExtension extends Extension {
   public requirePeer = true;
 
   public onHandshake = (infoHash: string, peerId: string, extensions: HandshakeExtensions) => {
-    console.log(this.wire.wireName, 'NewExtension incoming', infoHash, peerId, extensions);
+    // console.log(this.wire.wireName, 'NewExtension incoming', infoHash, peerId, extensions);
   };
 
   public onExtendedHandshake = (handshake: ExtendedHandshake) => {
-    console.log(this.wire.wireName, 'NewExtension Extended Handshake incoming', handshake);
-    console.log('this.wire.destroyed', this.wire.destroyed);
+    // console.log(this.wire.wireName, 'NewExtension Extended Handshake incoming', handshake);
   };
 
   public onMessage = (buf: Buffer) => {
@@ -28,26 +27,30 @@ outgoingWire.use(NewExtension);
 incomingWire.use(NewExtension);
 
 incomingWire.on('handshake', (...data: unknown[]) => {
-  console.log('{incomingWire} Incoming handshake from ', data);
+  console.log('2 {incomingWire} Incoming handshake from ', data);
   incomingWire.handshake('4444444444444444444430313233343536373839', '4444444444444444444430313233343536373839');
 });
 
 outgoingWire.on('handshake', (...data: unknown[]) => {
-  console.log('{outgoingWire} Incoming handshake', data);
-  outgoingWire.request(1, 2, 40, (...args: any[]) => {
-    console.log('Requesting', args);
-  });
+  console.log('3 {outgoingWire} Incoming handshake', data);
+});
+
+incomingWire.on('extended', (...data: unknown[]) => {
+  console.log('4 {incomingWire} Incoming extended handshake from ', data);
+});
+
+outgoingWire.on('extended', (...data: unknown[]) => {
+  console.log('5 {outgoingWire} Incoming extended handshake', data);
 });
 
 incomingWire.on('request', (...args: any[]) => {
   console.log('Peer requested data', args);
 });
 
-incomingWire.on('destroy-required-extension', (reason: string) => {
-  console.log('incomingWire.destroyed', incomingWire.destroyed, reason);
-});
-outgoingWire.on('destroy-required-extension', (reason: string) => {
-  console.log('outgoingWire.destroyed', outgoingWire.destroyed, reason);
+incomingWire.once('interested', () => {
+  console.log('Outgoing wire is interested, unchoke');
+  incomingWire.unchoke();
 });
 
+console.log('1');
 outgoingWire.handshake('3031323334353637383930313233343536373839', '3132333435363738393031323334353637383930');

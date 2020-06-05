@@ -8,7 +8,7 @@ import stream from 'readable-stream';
 import { Extension, ExtendedHandshake } from './Extension';
 import { MESSAGE_KEEP_ALIVE, MESSAGE_RESERVED, MESSAGE_PROTOCOL, MESSAGE_CHOKE, MESSAGE_UNCHOKE, MESSAGE_INTERESTED, MESSAGE_UNINTERESTED, MESSAGE_PORT } from './models/PeerMessages';
 
-const debug = debugNs('bittorrent-protocol');
+const debug = debugNs('firaenix/bittorrent-protocol');
 
 const BITFIELD_GROW = 400000;
 const KEEP_ALIVE_TIMEOUT = 55000;
