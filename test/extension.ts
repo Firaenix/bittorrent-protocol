@@ -130,7 +130,7 @@ test('Wire destroyed on Extension with requirePeer true', (t) => {
     incomingWire.handshake('4444444444444444444430313233343536373839', '4444444444444444444430313233343536373839');
   });
 
-  incomingWire.on('destroy-required-extension', (reason: string) => {
+  incomingWire.on('missing_extension', (reason: string) => {
     t.true(incomingWire.destroy);
     t.equals(reason, `Connected peer did not have the same extension: test_extension`);
   });

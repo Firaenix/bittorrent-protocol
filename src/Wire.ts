@@ -599,57 +599,70 @@ export default class Wire extends stream.Duplex {
     this.emit('port', port);
   }
 
-  private _onExtended(ext: number, buf: Buffer) {
-    if (ext === 0) {
-      let info: ExtendedHandshake | undefined;
-      try {
-        info = bencode.decode(buf);
-      } catch (err) {
-        this._debug('ignoring invalid extended handshake: %s', err.message || err);
-        return;
-      }
-
-      if (!info) {
-        return;
-      }
-      this.peerExtendedHandshake = info;
-
-      // Find any extensions that require the other peer to have it too.
-      for (const name in this._ext) {
-        if (this._ext[name] && this._ext[name].requirePeer && !this.peerExtendedHandshake.m?.[name]) {
-          this._debug('Destroying connection, peer doesnt have same extension.', name);
-          this.destroy();
-          this.emit('destroy-required-extension', `Connected peer did not have the same extension: ${name}`);
-          return;
-        }
-      }
-
-      let name;
-      if (typeof info.m === 'object') {
-        for (name in info.m) {
-          this.peerExtendedMapping[name] = Number(info.m[name].toString());
-        }
-      }
-      for (name in this._ext) {
-        if (this.peerExtendedMapping[name]) {
-          this._ext[name].onExtendedHandshake(this.peerExtendedHandshake);
-        }
-      }
-      this._debug('got extended handshake');
-      this.emit('extended', 'handshake', this.peerExtendedHandshake);
-    } else {
-      if (this.extendedMapping[ext]) {
-        ext = this.extendedMapping[ext] as any; // friendly name for extension
-        if (this._ext[ext]) {
-          // there is an registered extension handler, so call it
-          this._ext[ext].onMessage(buf);
-        }
-      }
-      this._debug('got extended message ext=%s', ext);
-      this.emit('extended', ext, buf);
+  private onExtendedMessage(extensionId: number, buf: Buffer) {
+    if (!this.extendedMapping[extensionId]) {
+      throw new Error(`Could not find extension with the given id: ${extensionId}`);
     }
 
+    // get friendly name for extension
+    const extensionName = this.extendedMapping[extensionId];
+    if (!this._ext[extensionName]) {
+      throw new Error(`Could not find extension with the given name: ${extensionName}`);
+    }
+
+    // there is an registered extension handler, so call it
+    this._ext[extensionName].onMessage(buf);
+    this._debug('got extended message ext=%s', extensionName);
+    this.emit('extended', extensionName, buf);
+  }
+
+  private onExtendedHandshake(buf: Buffer) {
+    let info: ExtendedHandshake | undefined;
+    try {
+      info = bencode.decode(buf);
+    } catch (err) {
+      this._debug('ignoring invalid extended handshake: %s', err.message || err);
+      return;
+    }
+
+    if (!info) {
+      return;
+    }
+    this.peerExtendedHandshake = info;
+
+    // Find any extensions that require the other peer to have it too.
+    for (const name in this._ext) {
+      if (this._ext[name] && this._ext[name].requirePeer && !this.peerExtendedHandshake.m?.[name]) {
+        this._debug('Destroying connection, peer doesnt have same extension.', name);
+        this.destroy();
+        this.emit('missing_extension', `Connected peer did not have the same extension: ${name}`);
+        return;
+      }
+    }
+
+    let name;
+    if (typeof info.m === 'object') {
+      for (name in info.m) {
+        this.peerExtendedMapping[name] = Number(info.m[name].toString());
+      }
+    }
+    for (name in this._ext) {
+      if (this.peerExtendedMapping[name]) {
+        this._ext[name].onExtendedHandshake(this.peerExtendedHandshake);
+      }
+    }
+    this._debug('got extended handshake');
+    this.emit('extended', 'handshake', this.peerExtendedHandshake);
     this._extendedHandshakeSuccess = true;
+  }
+
+  private _onExtended(extensionId: number, buf: Buffer) {
+    // Which extension this message came from was not specified, this is a handshake
+    if (extensionId === 0) {
+      return this.onExtendedHandshake(buf);
+    }
+
+    return this.onExtendedMessage(extensionId, buf);
   }
 
   private _onTimeout() {
