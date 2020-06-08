@@ -1,5 +1,7 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import Wire from './Wire';
 import { IExtension, ExtensionExtraFields } from './models/IExtension';
+import { BitFieldData } from 'bitfield';
 
 export type ExtendedHandshakeMessageParams = { [key: string]: any };
 
@@ -15,8 +17,6 @@ export type ExtendedHandshake = {
 
 export type HandshakeExtensions = { [name: string]: boolean };
 
-const NoopAsync = async () => {};
-
 export abstract class Extension implements IExtension {
   public wire: Wire;
   public abstract name: string;
@@ -27,20 +27,24 @@ export abstract class Extension implements IExtension {
     this.wire = wire;
   }
 
+  public sendExtendedMessage = (data: object) => {
+    this.wire.extended(this.name, data);
+  };
+
   public abstract onHandshake: (infoHash: string, peerId: string, extensions: HandshakeExtensions) => void;
 
   public abstract onExtendedHandshake: (handshake: ExtendedHandshake) => void;
 
   public abstract onMessage: (buf: Buffer) => void;
 
-  public onPiece = NoopAsync;
-  public onFinish = NoopAsync;
-  public onCancel = NoopAsync;
-  public onRequest = NoopAsync;
-  public onBitField = NoopAsync;
-  public onHave = NoopAsync;
-  public onUninterested = NoopAsync;
-  public onInterested = NoopAsync;
-  public onUnchoke = NoopAsync;
-  public onChoke = NoopAsync;
+  public onPiece = async (index: number, offset: number, buffer: Buffer) => {};
+  public onFinish = async () => {};
+  public onCancel = async (index: number, offset: number, length: number) => {};
+  public onRequest = async (index: number, offset: number, length: number) => {};
+  public onBitField = async (bitfield: BitFieldData) => {};
+  public onHave = async (index: number) => {};
+  public onUninterested = async () => {};
+  public onInterested = async () => {};
+  public onUnchoke = async () => {};
+  public onChoke = async () => {};
 }

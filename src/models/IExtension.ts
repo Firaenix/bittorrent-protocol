@@ -9,6 +9,9 @@ export interface IExtension {
   name: string;
   requirePeer?: boolean;
   extraFields?: ExtensionExtraFields;
+
+  sendExtendedMessage: (data: object) => void;
+
   onHandshake: (infoHash: string, peerId: string, extensions: HandshakeExtensions) => void;
   onExtendedHandshake: (handshake: ExtendedHandshake) => void;
   onMessage: (buf: Buffer) => void;
