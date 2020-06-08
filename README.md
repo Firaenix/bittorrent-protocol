@@ -8,10 +8,11 @@ Node.js implementation of the [BitTorrent peer wire protocol](https://wiki.theor
 
 - Converted to typescript
 - Allow optional termination of stream if remote peer does not have the same extension
+- Ensure full handshake + extended handshake happens before allowing data to be requested.
+- BEP10 extensions are now much more powerful, allowing extensions to hook into the bittorrent protocol as messages are passed around. Check IExtension for details on the methods added. (BEP10e)
 
 ## TODO
 
-- Ensure full handshake + extended handshake happens before allowing data to be requested.
 - Allow metainfo files and magnet links to specify the hashing algorithm used for an infohash.
 - (Maybe) Satisfy ![BEP30](http://bittorrent.org/beps/bep_0030.html) and allow Merkel hashes instead of pieces in a torrent file.
 - Torrent Signing ![BEP35](http://bittorrent.org/beps/bep_0035.html)

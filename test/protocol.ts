@@ -185,13 +185,17 @@ test('No duplicate `have` events for same piece', (t) => {
   t.equal(haveEvents, 0);
   t.equal(!!wire.peerPieces.get(0), false);
   wire.have(0);
-  process.nextTick(() => {
+
+  // This used to be process.nextTick but now the onMessages are asynchronous, so we cant rely on them being resolved in the next tick anymore.
+  setTimeout(() => {
     t.equal(haveEvents, 1, 'emitted event for new piece');
     t.equal(!!wire.peerPieces.get(0), true);
     wire.have(0);
-    process.nextTick(() => {
+
+    // This used to be process.nextTick but now the onMessages are asynchronous, so we cant rely on them being resolved in the next tick anymore.
+    setTimeout(() => {
       t.equal(haveEvents, 1, 'not emitted event for preexisting piece');
       t.equal(!!wire.peerPieces.get(0), true);
-    });
-  });
+    }, 500);
+  }, 500);
 });

@@ -1,12 +1,14 @@
 import arrayRemove from 'unordered-array-remove';
 import bencode from 'bencode';
-import BitField from 'bitfield';
+import BitField, { BitFieldData } from 'bitfield';
 import debugNs from 'debug';
 import randombytes from 'randombytes';
 import speedometer from 'speedometer';
 import stream from 'readable-stream';
-import { Extension, ExtendedHandshake } from './Extension';
+import { ExtendedHandshake } from './Extension';
 import { MessageBuffers, MessageFlags } from './models/PeerMessages';
+import { IExtension } from './models/IExtension';
+import { PieceRequest } from './models/PieceRequest';
 
 const debug = debugNs('firaenix-bittorrent-protocol');
 
@@ -14,20 +16,6 @@ const BITFIELD_GROW = 400000;
 const KEEP_ALIVE_TIMEOUT = 55000;
 
 export type ExtensionsMap = { [x: string]: boolean; dht: boolean; extended: boolean };
-
-export class PieceRequest {
-  public piece: number;
-  public offset: number;
-  public length: number;
-  public callback: Function;
-
-  constructor(piece: number, offset: number, length: number, cb: Function) {
-    this.piece = piece;
-    this.offset = offset;
-    this.length = length;
-    this.callback = cb;
-  }
-}
 
 export default class Wire extends stream.Duplex {
   public _debugId: string;
@@ -41,13 +29,13 @@ export default class Wire extends stream.Duplex {
   public peerPieces: BitField;
   public peerExtensions: ExtensionsMap;
   public requests: PieceRequest[];
-  public peerRequests: unknown[];
+  public peerRequests: PieceRequest[];
 
   public extendedMapping: { [key: number]: string };
   public peerExtendedMapping: { [key: string]: number };
   public extendedHandshake: ExtendedHandshake;
   public peerExtendedHandshake: ExtendedHandshake;
-  public _ext: { [extensionName: string]: Extension };
+  public _ext: { [extensionName: string]: IExtension };
   public _nextExt: number;
 
   public uploaded: number;
@@ -182,7 +170,7 @@ export default class Wire extends stream.Duplex {
    * Use the specified protocol extension.
    * @param  {function} Extension
    */
-  public use(newExtension: (wire: Wire) => Extension): void {
+  public use(newExtension: (wire: Wire) => IExtension): void {
     const ext = this._nextExt;
     const handler = newExtension(this);
 
@@ -517,52 +505,77 @@ export default class Wire extends stream.Duplex {
     this._handshakeSuccess = true;
   }
 
-  private _onChoke() {
+  private async _onChoke() {
     this.peerChoking = true;
     this._debug('got choke');
+
+    const extensionCalls = Object.values(this._ext).map((x) => x.onChoke());
+    await Promise.all(extensionCalls);
+
     this.emit('choke');
     while (this.requests.length) {
       this._callback(this.requests.pop(), new Error('peer is choking'), null);
     }
   }
 
-  private _onUnchoke() {
+  private async _onUnchoke() {
     this.peerChoking = false;
     this._debug('got unchoke');
+
+    const extensionCalls = Object.values(this._ext).map((x) => x.onUnchoke());
+    await Promise.all(extensionCalls);
     this.emit('unchoke');
   }
 
-  private _onInterested() {
+  private async _onInterested() {
     this.peerInterested = true;
     this._debug('got interested');
+
+    const extensionCalls = Object.values(this._ext).map((x) => x.onInterested());
+    await Promise.all(extensionCalls);
+
     this.emit('interested');
   }
 
-  private _onUninterested() {
+  private async _onUninterested() {
     this.peerInterested = false;
     this._debug('got uninterested');
+
+    const extensionCalls = Object.values(this._ext).map((x) => x.onUninterested());
+    await Promise.all(extensionCalls);
+
     this.emit('uninterested');
   }
 
-  private _onHave(index) {
+  private async _onHave(index: number) {
     if (this.peerPieces.get(index)) return;
     this._debug('got have %d', index);
+
+    const extensionCalls = Object.values(this._ext).map((x) => x.onHave(index));
+    await Promise.all(extensionCalls);
 
     this.peerPieces.set(index, true);
     this.emit('have', index);
   }
 
-  private _onBitField(buffer) {
+  private async _onBitField(buffer: BitFieldData) {
     this.peerPieces = new BitField(buffer);
     this._debug('got bitfield');
+
+    const extensionCalls = Object.values(this._ext).map((x) => x.onBitField(buffer));
+    await Promise.all(extensionCalls);
+
     this.emit('bitfield', this.peerPieces);
   }
 
-  private _onRequest(index: number, offset: number, length: number): void {
+  private async _onRequest(index: number, offset: number, length: number): Promise<void> {
     if (this.amChoking) {
       return;
     }
     this._debug('got request index=%d offset=%d length=%d', index, offset, length);
+
+    const extensionCalls = Object.values(this._ext).map((x) => x.onRequest(index, offset, length));
+    await Promise.all(extensionCalls);
 
     const respond = (err, buffer) => {
       // below request var gets hoisted above this function.
@@ -579,17 +592,29 @@ export default class Wire extends stream.Duplex {
     this.emit('request', index, offset, length, respond);
   }
 
-  private _onPiece(index, offset, buffer): void {
-    this._debug('got piece index=%d offset=%d', index, offset);
-    this._callback(this._pull(this.requests, index, offset, buffer.length), null, buffer);
-    this.downloaded += buffer.length;
-    this.downloadSpeed(buffer.length);
-    this.emit('download', buffer.length);
-    this.emit('piece', index, offset, buffer);
+  private async _onPiece(index: number, offset: number, buffer: Buffer): Promise<void> {
+    try {
+      const extensionOnPieces = Object.values(this._ext).map((x) => x.onPiece(index, offset, buffer));
+      await Promise.all(extensionOnPieces);
+
+      this._debug('got piece index=%d offset=%d', index, offset);
+      this._callback(this._pull(this.requests, index, offset, buffer.length), null, buffer);
+      this.downloaded += buffer.length;
+      this.downloadSpeed(buffer.length);
+      this.emit('download', buffer.length);
+      this.emit('piece', index, offset, buffer);
+    } catch (error) {
+      console.error(error);
+      this._debug('An error occurred when recieving a piece, destroying the connection', error);
+      this.destroy();
+    }
   }
 
-  private _onCancel(index, offset, length): void {
+  private async _onCancel(index: number, offset: number, length: number): Promise<void> {
     this._debug('got cancel index=%d offset=%d length=%d', index, offset, length);
+    const extensionCalls = Object.values(this._ext).map((x) => x.onCancel(index, offset, length));
+    await Promise.all(extensionCalls);
+
     this._pull(this.peerRequests, index, offset, length);
     this.emit('cancel', index, offset, length);
   }
@@ -697,7 +722,7 @@ export default class Wire extends stream.Duplex {
     cb(null); // Signal that we're ready for more data
   }
 
-  private _callback(request, err, buffer) {
+  private _callback(request: PieceRequest | null | undefined, err: Error | null | undefined, buffer: Buffer | null | undefined) {
     if (!request) return;
 
     this._clearTimeout();
@@ -751,29 +776,29 @@ export default class Wire extends stream.Duplex {
    * Handle a message from the remote peer.
    * @param  {Buffer} buffer
    */
-  private _onMessage(buffer: Buffer) {
+  private async _onMessage(buffer: Buffer) {
     this._parse(4, this._onMessageLength);
     const messageFlag: MessageFlags = buffer[0];
 
     switch (messageFlag) {
       case MessageFlags.Choke:
-        return this._onChoke();
+        return await this._onChoke();
       case MessageFlags.Unchoke:
-        return this._onUnchoke();
+        return await this._onUnchoke();
       case MessageFlags.Interested:
-        return this._onInterested();
+        return await this._onInterested();
       case MessageFlags.NotInterested:
-        return this._onUninterested();
+        return await this._onUninterested();
       case MessageFlags.Have:
-        return this._onHave(buffer.readUInt32BE(1));
+        return await this._onHave(buffer.readUInt32BE(1));
       case MessageFlags.Bitfield:
-        return this._onBitField(buffer.slice(1));
+        return await this._onBitField(buffer.slice(1));
       case MessageFlags.Request:
-        return this._onRequest(buffer.readUInt32BE(1), buffer.readUInt32BE(5), buffer.readUInt32BE(9));
+        return await this._onRequest(buffer.readUInt32BE(1), buffer.readUInt32BE(5), buffer.readUInt32BE(9));
       case MessageFlags.Piece:
-        return this._onPiece(buffer.readUInt32BE(1), buffer.readUInt32BE(5), buffer.slice(9));
+        return await this._onPiece(buffer.readUInt32BE(1), buffer.readUInt32BE(5), buffer.slice(9));
       case MessageFlags.Cancel:
-        return this._onCancel(buffer.readUInt32BE(1), buffer.readUInt32BE(5), buffer.readUInt32BE(9));
+        return await this._onCancel(buffer.readUInt32BE(1), buffer.readUInt32BE(5), buffer.readUInt32BE(9));
       case 9:
         return this._onPort(buffer.readUInt16BE(1));
       case MessageFlags.Extended:
@@ -807,8 +832,11 @@ export default class Wire extends stream.Duplex {
     });
   }
 
-  private _onFinish() {
+  private async _onFinish() {
     this._finished = true;
+
+    const extensionCalls = Object.values(this._ext).map((x) => x.onFinish());
+    await Promise.all(extensionCalls);
 
     this.push(null); // stream cannot be half open, so signal the end of it
     while (this.read()) {} // consume and discard the rest of the stream data
@@ -827,10 +855,10 @@ export default class Wire extends stream.Duplex {
     debug(`[${this._debugId}]`, ...args);
   }
 
-  private _pull(requests, piece, offset, length) {
+  private _pull(requests: PieceRequest[], pieceIdx: number, offset: number, length: number) {
     for (let i = 0; i < requests.length; i++) {
       const req = requests[i];
-      if (req.piece === piece && req.offset === offset && req.length === length) {
+      if (req.piece === pieceIdx && req.offset === offset && req.length === length) {
         arrayRemove(requests, i);
         return req;
       }
