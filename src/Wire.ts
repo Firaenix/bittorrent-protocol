@@ -855,7 +855,9 @@ export default class Wire extends stream.Duplex {
   private async _onFinish() {
     this._finished = true;
 
-    const extensionCalls = Object.values(this._ext).map((x) => x.onFinish());
+    const extensionCalls = Object.values(this._ext)
+      .filter((x) => x.onFinish)
+      .map((x) => x.onFinish());
     await Promise.all(extensionCalls);
 
     this.push(null); // stream cannot be half open, so signal the end of it
