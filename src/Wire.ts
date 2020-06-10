@@ -509,7 +509,9 @@ export default class Wire extends stream.Duplex {
     this.peerChoking = true;
     this._debug('got choke');
 
-    const extensionCalls = Object.values(this._ext).map((x) => x.onChoke());
+    const extensionCalls = Object.values(this._ext)
+      .filter((x) => x.onChoke)
+      .map((x) => x.onChoke());
     await Promise.all(extensionCalls);
 
     this.emit('choke');
@@ -522,7 +524,9 @@ export default class Wire extends stream.Duplex {
     this.peerChoking = false;
     this._debug('got unchoke');
 
-    const extensionCalls = Object.values(this._ext).map((x) => x.onUnchoke());
+    const extensionCalls = Object.values(this._ext)
+      .filter((x) => x.onUnchoke)
+      .map((x) => x.onUnchoke());
     await Promise.all(extensionCalls);
     this.emit('unchoke');
   }
@@ -531,7 +535,9 @@ export default class Wire extends stream.Duplex {
     this.peerInterested = true;
     this._debug('got interested');
 
-    const extensionCalls = Object.values(this._ext).map((x) => x.onInterested());
+    const extensionCalls = Object.values(this._ext)
+      .filter((x) => x.onInterested)
+      .map((x) => x.onInterested());
     await Promise.all(extensionCalls);
 
     this.emit('interested');
@@ -541,7 +547,9 @@ export default class Wire extends stream.Duplex {
     this.peerInterested = false;
     this._debug('got uninterested');
 
-    const extensionCalls = Object.values(this._ext).map((x) => x.onUninterested());
+    const extensionCalls = Object.values(this._ext)
+      .filter((x) => x.onUninterested)
+      .map((x) => x.onUninterested());
     await Promise.all(extensionCalls);
 
     this.emit('uninterested');
@@ -551,7 +559,9 @@ export default class Wire extends stream.Duplex {
     if (this.peerPieces.get(index)) return;
     this._debug('got have %d', index);
 
-    const extensionCalls = Object.values(this._ext).map((x) => x.onHave(index));
+    const extensionCalls = Object.values(this._ext)
+      .filter((x) => x.onHave)
+      .map((x) => x.onHave(index));
     await Promise.all(extensionCalls);
 
     this.peerPieces.set(index, true);
@@ -562,7 +572,9 @@ export default class Wire extends stream.Duplex {
     this.peerPieces = new BitField(buffer);
     this._debug('got bitfield');
 
-    const extensionCalls = Object.values(this._ext).map((x) => x.onBitField(buffer));
+    const extensionCalls = Object.values(this._ext)
+      .filter((x) => x.onBitField)
+      .map((x) => x.onBitField(buffer));
     await Promise.all(extensionCalls);
 
     this.emit('bitfield', this.peerPieces);
@@ -574,8 +586,12 @@ export default class Wire extends stream.Duplex {
     }
     this._debug('got request index=%d offset=%d length=%d', index, offset, length);
 
-    const extensionCalls = Object.values(this._ext).map((x) => x.onRequest(index, offset, length));
+    const extensionCalls = Object.values(this._ext)
+      .filter((x) => x.onRequest)
+      .map((x) => x.onRequest(index, offset, length));
     await Promise.all(extensionCalls);
+
+    console.log('Extensions have resolved');
 
     const respond = (err, buffer) => {
       // below request var gets hoisted above this function.
@@ -594,7 +610,9 @@ export default class Wire extends stream.Duplex {
 
   private async _onPiece(index: number, offset: number, buffer: Buffer): Promise<void> {
     try {
-      const extensionOnPieces = Object.values(this._ext).map((x) => x.onPiece(index, offset, buffer));
+      const extensionOnPieces = Object.values(this._ext)
+        .filter((x) => x.onPiece)
+        .map((x) => x.onPiece(index, offset, buffer));
       await Promise.all(extensionOnPieces);
 
       this._debug('got piece index=%d offset=%d', index, offset);
@@ -612,7 +630,9 @@ export default class Wire extends stream.Duplex {
 
   private async _onCancel(index: number, offset: number, length: number): Promise<void> {
     this._debug('got cancel index=%d offset=%d length=%d', index, offset, length);
-    const extensionCalls = Object.values(this._ext).map((x) => x.onCancel(index, offset, length));
+    const extensionCalls = Object.values(this._ext)
+      .filter((x) => x.onCancel)
+      .map((x) => x.onCancel(index, offset, length));
     await Promise.all(extensionCalls);
 
     this._pull(this.peerRequests, index, offset, length);
@@ -852,7 +872,7 @@ export default class Wire extends stream.Duplex {
   }
 
   private _debug(...args: unknown[]) {
-    debug(`[${this._debugId}]`, ...args);
+    debug(`[${Date.now()}][${this._debugId}]`, ...args);
   }
 
   private _pull(requests: PieceRequest[], pieceIdx: number, offset: number, length: number) {
