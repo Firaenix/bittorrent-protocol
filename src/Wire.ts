@@ -17,7 +17,7 @@ const KEEP_ALIVE_TIMEOUT = 55000;
 
 export type ExtensionsMap = { [x: string]: boolean; dht: boolean; extended: boolean };
 
-export default class Wire extends stream.Duplex {
+export class Wire extends stream.Duplex {
   public _debugId: string;
   public peerId: string | undefined;
   public peerIdBuffer: Buffer | undefined;
@@ -888,3 +888,5 @@ export default class Wire extends stream.Duplex {
     return null;
   }
 }
+
+export default Wire;
