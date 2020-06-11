@@ -36,15 +36,4 @@ export abstract class Extension implements IExtension {
   public abstract onExtendedHandshake: (handshake: ExtendedHandshake) => void;
 
   public abstract onMessage: (buf: Buffer) => void;
-
-  public onPiece = async (index: number, offset: number, buffer: Buffer) => {};
-  public onFinish = async () => {};
-  public onCancel = async (index: number, offset: number, length: number) => {};
-  public onRequest = async (index: number, offset: number, length: number) => {};
-  public onBitField = async (bitfield: BitFieldData) => {};
-  public onHave = async (index: number) => {};
-  public onUninterested = async () => {};
-  public onInterested = async () => {};
-  public onUnchoke = async () => {};
-  public onChoke = async () => {};
 }
