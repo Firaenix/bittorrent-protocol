@@ -1,7 +1,7 @@
 {
   "name": "@firaenix/bittorrent-protocol",
   "description": "Simple, robust, BitTorrent peer wire protocol implementation",
-  "version": "3.2.16",
+  "version": "3.2.23",
   "author": {
     "name": "Firaenix",
     "email": "Nick.Carton@gmail.com"
@@ -18,7 +18,6 @@
     "@types/readable-stream": "^2.3.6",
     "bencode": "^2.0.0",
     "bitfield": "^3.0.0",
-    "bsv": "^1.5.3",
     "debug": "^4.1.1",
     "randombytes": "^2.0.5",
     "readable-stream": "^3.0.0",

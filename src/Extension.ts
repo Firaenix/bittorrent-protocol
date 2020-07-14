@@ -1,5 +1,7 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import Wire from './Wire';
 import { IExtension, ExtensionExtraFields } from './models/IExtension';
+import { BitFieldData } from 'bitfield';
 
 export type ExtendedHandshakeMessageParams = { [key: string]: any };
 
@@ -24,6 +26,10 @@ export abstract class Extension implements IExtension {
   constructor(wire: Wire) {
     this.wire = wire;
   }
+
+  public sendExtendedMessage = (data: object) => {
+    this.wire.extended(this.name, data);
+  };
 
   public abstract onHandshake: (infoHash: string, peerId: string, extensions: HandshakeExtensions) => void;
 
