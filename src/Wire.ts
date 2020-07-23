@@ -236,8 +236,16 @@ export class Wire extends stream.Duplex {
       peerId = peerIdBuffer.toString('hex');
     }
 
-    if (infoHashBuffer.length !== 20 || peerIdBuffer.length !== 20) {
-      throw new Error('infoHash and peerId MUST have length 20');
+    if (!infoHashBuffer || infoHashBuffer.length <= 0) {
+      const err = new Error('infoHash must be specified');
+      this.emit('error', err);
+      throw err;
+    }
+
+    if (peerIdBuffer.length !== 20) {
+      const err = new Error('peerId MUST have length 20');
+      this.emit('error', err);
+      throw err;
     }
 
     this._debug('handshake i=%s p=%s exts=%o', infoHash, peerId, extensions);
