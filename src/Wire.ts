@@ -63,7 +63,7 @@ export class Wire extends stream.Duplex {
     super();
     this.wireName = name;
 
-    this._debugId = randombytes(4).toString('hex');
+    this._debugId = name || randombytes(4).toString('hex');
     this._debug('new wire');
 
     this.peerId = undefined; // remote peer id (hex string)
@@ -220,8 +220,8 @@ export class Wire extends stream.Duplex {
    * @param  {Object} extensions
    */
   public handshake(infoHash: Buffer | string, peerId: Buffer | string, extensions?: any) {
-    let infoHashBuffer;
-    let peerIdBuffer;
+    let infoHashBuffer: Buffer;
+    let peerIdBuffer: Buffer;
     if (typeof infoHash === 'string') {
       infoHash = infoHash.toLowerCase();
       infoHashBuffer = Buffer.from(infoHash, 'hex');
@@ -236,8 +236,14 @@ export class Wire extends stream.Duplex {
       peerId = peerIdBuffer.toString('hex');
     }
 
-    if (!infoHashBuffer || infoHashBuffer.length <= 0) {
+    if (!infoHashBuffer || !infoHashBuffer.length) {
       const err = new Error('infoHash must be specified');
+      this.emit('error', err);
+      throw err;
+    }
+
+    if (infoHashBuffer.length > 255) {
+      const err = new Error(`infoHash must be smaller than 255 bytes long, it is currently ${infoHashBuffer.length}`);
       this.emit('error', err);
       throw err;
     }
@@ -257,7 +263,9 @@ export class Wire extends stream.Duplex {
 
     if (extensions && extensions.dht) reserved[7] |= 1;
 
-    this._push(Buffer.concat([MessageBuffers.MESSAGE_PROTOCOL, reserved, infoHashBuffer, peerIdBuffer]));
+    // Prepend length of infoHash as a single byte - dont care about overflows, for now must be only 255 bits large to represent a 255 byte hash maximum length.
+    // Going off the assumption that by the time you need 255 bytes for a hash, we will move to a more effective hashing algorithm.
+    this._push(Buffer.concat([MessageBuffers.MESSAGE_PROTOCOL, reserved, Buffer.from([infoHashBuffer.length]), MessageBuffers.INFOHASH_SPLIT, infoHashBuffer, peerIdBuffer]));
     this._handshakeSent = true;
 
     if (this.peerExtensions.extended && !this._extendedHandshakeSent) {
@@ -719,12 +727,14 @@ export class Wire extends stream.Duplex {
   _write(data: Buffer, encoding: string, cb: (e: any) => void) {
     this._bufferSize += data.length;
     this._buffer.push(data);
+    this._debug('Data pushing', data, this._bufferSize);
 
     while (this._bufferSize >= this._parserSize) {
       const buffer = this._buffer.length === 1 ? this._buffer[0] : Buffer.concat(this._buffer);
       this._bufferSize -= this._parserSize;
       this._buffer = this._bufferSize ? [buffer.slice(this._parserSize)] : [];
       if (this._parser) {
+        this._debug('has parser sending', this._parserSize, buffer);
         this._parser(buffer.slice(0, this._parserSize));
       }
     }
@@ -762,10 +772,24 @@ export class Wire extends stream.Duplex {
    * @param  {number} size
    * @param  {function} parser
    */
-  private _parse(size: number, parser: (buf: Buffer) => unknown) {
+  private _parse(size: number, parser: (buf: Buffer) => void) {
     this._parserSize = size;
     this._parser = parser;
   }
+
+  /**
+   * Takes a number of bytes that the local peer is waiting to receive from the remote peer
+   * in order to parse a complete message, and a callback function to be called once enough
+   * bytes have arrived.
+   * @param  {number} size
+   */
+  private _parseAsync = (size: number) =>
+    new Promise<Buffer>((resolve) => {
+      this._parse(size, (buf) => {
+        resolve(buf);
+        // this._parser = null;
+      });
+    });
 
   /**
    * Handle the first 4 bytes of a message, to determine the length of bytes that must be
@@ -820,9 +844,12 @@ export class Wire extends stream.Duplex {
   }
 
   private _parseHandshake() {
-    this._parse(1, (buffer) => {
-      const pstrlen = buffer.readUInt8(0);
-      this._parse(pstrlen + 48, (handshake) => {
+    this._parse(1, (bittorrentProtocolIdent) => {
+      const pstrlen = bittorrentProtocolIdent.readUInt8(0);
+      this._debug('Is start of Bittorrent Protocol?', pstrlen === MessageBuffers.MESSAGE_PROTOCOL[0], bittorrentProtocolIdent.toString());
+
+      this._parse(pstrlen, (handshake) => {
+        this._debug('HANDSHAKE BUFFER', handshake.toString(), handshake);
         const protocol = handshake.slice(0, pstrlen);
 
         if (protocol.toString() !== 'BitTorrent protocol') {
@@ -830,14 +857,38 @@ export class Wire extends stream.Duplex {
           this.end();
           return;
         }
-        handshake = handshake.slice(pstrlen);
 
-        this._onHandshake(handshake.slice(8, 28), handshake.slice(28, 48), {
-          dht: !!(handshake[7] & 0x01), // see bep_0005
-          extended: !!(handshake[5] & 0x10) // see bep_0010
+        // GET RESERVED
+        this._parse(8, (reservedFlags) => {
+          this._debug('Reserved flags', reservedFlags);
+          const dht = !!(reservedFlags[7] & 0x01); // see bep_0005
+          const extended = !!(reservedFlags[5] & 0x10); // see bep_0010
+
+          this._parse(1, (infoHashSizeBuf) => {
+            this._debug('infoHashSizeBuf', infoHashSizeBuf);
+            const infoHashSize = infoHashSizeBuf.readUInt8(0);
+            console.log('InfoHash Size:', infoHashSize);
+
+            // Make sure that the following character is :
+            this._parse(1, (colonChar) => {
+              if (!colonChar.equals(MessageBuffers.INFOHASH_SPLIT)) {
+                throw new Error('Invalid handshake, must be infohash_size:infohash. Missing colon');
+              }
+
+              // Infohash size + peerId size
+              this._parse(infoHashSize + 20, (infoHashAndPeerId) => {
+                // handshake = handshake.slice(pstrlen);
+
+                this._onHandshake(infoHashAndPeerId.slice(0, infoHashSize), infoHashAndPeerId.slice(infoHashSize, infoHashSize + 20), {
+                  dht,
+                  extended
+                });
+
+                this._parse(4, this._onMessageLength);
+              });
+            });
+          });
         });
-
-        this._parse(4, this._onMessageLength);
       });
     });
   }
