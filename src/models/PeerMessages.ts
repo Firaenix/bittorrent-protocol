@@ -10,6 +10,11 @@ export const MessageBuffers = {
   INFOHASH_SPLIT: Buffer.from(':')
 };
 
+export enum MessageParams {
+  INFOHASH_SIZE_LENGTH = 1,
+  PEER_ID_LENGTH = 20
+}
+
 export enum MessageFlags {
   Choke = 0,
   Unchoke = 1,

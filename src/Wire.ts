@@ -6,7 +6,7 @@ import randombytes from 'randombytes';
 import speedometer from 'speedometer';
 import stream from 'readable-stream';
 import { ExtendedHandshake } from './Extension';
-import { MessageBuffers, MessageFlags } from './models/PeerMessages';
+import { MessageBuffers, MessageFlags, MessageParams } from './models/PeerMessages';
 import { IExtension } from './models/IExtension';
 import { PieceRequest } from './models/PieceRequest';
 
@@ -845,12 +845,12 @@ export class Wire extends stream.Duplex {
 
   private _parseHandshake() {
     this._parse(1, (bittorrentProtocolIdent) => {
-      const pstrlen = bittorrentProtocolIdent.readUInt8(0);
-      this._debug('Is start of Bittorrent Protocol?', pstrlen === MessageBuffers.MESSAGE_PROTOCOL[0], bittorrentProtocolIdent.toString());
+      const protocolStringLength = bittorrentProtocolIdent.readUInt8(0);
+      this._debug('Is start of Bittorrent Protocol?', protocolStringLength === MessageBuffers.MESSAGE_PROTOCOL[0], bittorrentProtocolIdent.toString());
 
-      this._parse(pstrlen, (handshake) => {
+      this._parse(protocolStringLength, (handshake) => {
         this._debug('HANDSHAKE BUFFER', handshake.toString(), handshake);
-        const protocol = handshake.slice(0, pstrlen);
+        const protocol = handshake.slice(0, protocolStringLength);
 
         if (protocol.toString() !== 'BitTorrent protocol') {
           this._debug('Error: wire not speaking BitTorrent protocol (%s)', protocol.toString());
@@ -859,27 +859,27 @@ export class Wire extends stream.Duplex {
         }
 
         // GET RESERVED
-        this._parse(8, (reservedFlags) => {
+        this._parse(MessageBuffers.MESSAGE_RESERVED.length, (reservedFlags) => {
           this._debug('Reserved flags', reservedFlags);
           const dht = !!(reservedFlags[7] & 0x01); // see bep_0005
           const extended = !!(reservedFlags[5] & 0x10); // see bep_0010
 
-          this._parse(1, (infoHashSizeBuf) => {
+          this._parse(MessageParams.INFOHASH_SIZE_LENGTH, (infoHashSizeBuf) => {
             this._debug('infoHashSizeBuf', infoHashSizeBuf);
             const infoHashSize = infoHashSizeBuf.readUInt8(0);
             console.log('InfoHash Size:', infoHashSize);
 
             // Make sure that the following character is :
-            this._parse(1, (colonChar) => {
+            this._parse(MessageBuffers.INFOHASH_SPLIT.length, (colonChar) => {
               if (!colonChar.equals(MessageBuffers.INFOHASH_SPLIT)) {
                 throw new Error('Invalid handshake, must be infohash_size:infohash. Missing colon');
               }
 
               // Infohash size + peerId size
-              this._parse(infoHashSize + 20, (infoHashAndPeerId) => {
+              this._parse(infoHashSize + MessageParams.PEER_ID_LENGTH, (infoHashAndPeerId) => {
                 // handshake = handshake.slice(pstrlen);
 
-                this._onHandshake(infoHashAndPeerId.slice(0, infoHashSize), infoHashAndPeerId.slice(infoHashSize, infoHashSize + 20), {
+                this._onHandshake(infoHashAndPeerId.slice(0, infoHashSize), infoHashAndPeerId.slice(infoHashSize, infoHashSize + MessageParams.PEER_ID_LENGTH), {
                   dht,
                   extended
                 });
