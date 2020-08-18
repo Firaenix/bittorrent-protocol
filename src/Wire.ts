@@ -593,7 +593,7 @@ export class Wire extends stream.Duplex {
     const extensionCalls = Object.values(this._ext).map((x) => x.onRequest?.(index, offset, length));
     await Promise.all(extensionCalls);
 
-    console.log('Extensions have resolved');
+    this._debug('Extensions have resolved');
 
     const respond = (err, buffer) => {
       // below request var gets hoisted above this function.
@@ -867,7 +867,7 @@ export class Wire extends stream.Duplex {
           this._parse(MessageParams.INFOHASH_SIZE_LENGTH, (infoHashSizeBuf) => {
             this._debug('infoHashSizeBuf', infoHashSizeBuf);
             const infoHashSize = infoHashSizeBuf.readUInt8(0);
-            console.log('InfoHash Size:', infoHashSize);
+            this._debug('InfoHash Size:', infoHashSize);
 
             // Make sure that the following character is :
             this._parse(MessageBuffers.INFOHASH_SPLIT.length, (colonChar) => {
