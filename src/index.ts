@@ -2,7 +2,7 @@ import { Extension } from './Extension';
 import Wire from './Wire';
 
 export { Wire } from './Wire';
-export { ExtendedHandshake, ExtendedHandshakeMessageParams, Extension, HandshakeExtensions } from './Extension';
+export { ExtendedHandshake, ExtendedHandshakeMessageParams, Extension, EventExtension, HandshakeExtensions } from './Extension';
 export { IExtension } from './models/IExtension';
 export { MessageBuffers, MessageFlags } from './models/PeerMessages';
 
