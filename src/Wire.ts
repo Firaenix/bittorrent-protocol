@@ -47,7 +47,7 @@ export class Wire extends stream.Duplex {
   public _timeout: number | NodeJS.Timeout | undefined;
   public _timeoutMs: number;
   public destroyed: boolean;
-  public _finished: unknown;
+  public _finished: boolean;
   public _parserSize: number;
   public _parser: ((buf: Buffer) => unknown) | null;
   public _buffer: Buffer[];
@@ -375,6 +375,8 @@ export class Wire extends stream.Duplex {
   }
 
   /**
+   * Callback will be resolved when onPiece(index, offset, length, buffer) is called or something fails when requesting
+   *
    * Message "request": <len=0013><id=6><index><begin><length>
    * @param  {number}   index
    * @param  {number}   offset
