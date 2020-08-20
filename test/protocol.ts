@@ -133,7 +133,7 @@ test('Interested', (t) => {
 });
 
 test('Request a piece', (t) => {
-  t.plan(12);
+  t.plan(13);
 
   const wire = new Protocol();
   wire.on('error', (err) => {
@@ -159,7 +159,8 @@ test('Request a piece', (t) => {
     wire.request(0, 1, 11, (err, buffer) => {
       t.equal(wire.requests.length, 0);
       t.ok(!err);
-      t.equal(buffer.toString(), 'hello world');
+      t.ok(buffer);
+      t.equal(buffer?.toString(), 'hello world');
     });
     t.equal(wire.requests.length, 1);
   });
