@@ -12,6 +12,21 @@
       "preLaunchTask": "tsc: build - tsconfig.dev.json",
       "outFiles": ["${workspaceFolder}/dist/**/*.js"],
       "env": { "DEBUG": "*" }
+    },
+    {
+      "type": "node",
+      "request": "launch",
+      "name": "Test Current File",
+      "program": "${workspaceFolder}/node_modules/ts-node/dist/bin.js",
+      "args": ["${workspaceFolder}/node_modules/tape/bin/tape", "${relativeFile}"],
+      "console": "integratedTerminal",
+      "internalConsoleOptions": "neverOpen",
+      "env": {
+        "DEBUG": "*"
+      },
+      "windows": {
+        "program": "${workspaceFolder}/node_modules/tape/bin/tape"
+      }
     }
   ]
 }

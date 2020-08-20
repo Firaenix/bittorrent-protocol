@@ -1,4 +1,4 @@
-import Protocol from '../src/Wire';
+import Protocol, { Wire } from '../src/Wire';
 import test from 'tape';
 
 test('Handshake', (t) => {

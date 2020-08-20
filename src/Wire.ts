@@ -249,7 +249,7 @@ export class Wire extends stream.Duplex {
     }
 
     if (peerIdBuffer.length !== 20) {
-      const err = new Error('peerId MUST have length 20');
+      const err = new Error(`peerId MUST have length 20, length is ${peerIdBuffer.length}`);
       this.emit('error', err);
       throw err;
     }
@@ -361,7 +361,7 @@ export class Wire extends stream.Duplex {
    */
   public have(index: number) {
     this._debug('have %d', index);
-    this._message(4, [index], null);
+    this._message(MessageFlags.Have, [index], null);
   }
 
   /**
@@ -371,11 +371,17 @@ export class Wire extends stream.Duplex {
   public bitfield(bitfield: BitField | Buffer) {
     this._debug('bitfield');
     if (!Buffer.isBuffer(bitfield)) bitfield = bitfield.buffer;
-    this._message(5, [], bitfield);
+    this._message(MessageFlags.Bitfield, [], bitfield);
   }
 
   /**
-   * Callback will be resolved when onPiece(index, offset, length, buffer) is called or something fails when requesting
+   * Callback will be resolved when onPiece(index, offset, length, buffer) is called or something fails when requesting.
+   *
+   * NOTE: index,offset,length are used as a key to look up the callback later.
+   *
+   * So make sure you specify the length correctly or you will never get your callback.
+   *
+   * If the other party sends the same index and offset but a buffer of a different length, you will not recieve your callback.
    *
    * Message "request": <len=0013><id=6><index><begin><length>
    * @param  {number}   index
@@ -402,7 +408,7 @@ export class Wire extends stream.Duplex {
 
     this.requests.push(new PieceRequest(index, offset, length, cb));
     this._updateTimeout();
-    this._message(6, [index, offset, length], null);
+    this._message(MessageFlags.Request, [index, offset, length], null);
   }
 
   /**
@@ -416,7 +422,7 @@ export class Wire extends stream.Duplex {
     this.uploaded += buffer.length;
     this.uploadSpeed(buffer.length);
     this.emit('upload', buffer.length);
-    this._message(7, [index, offset], buffer);
+    this._message(MessageFlags.Piece, [index, offset], buffer);
   }
 
   /**
@@ -428,7 +434,7 @@ export class Wire extends stream.Duplex {
   public cancel(index: number, offset: number, length: number) {
     this._debug('cancel index=%d offset=%d length=%d', index, offset, length);
     this._callback(this._pull(this.requests, index, offset, length), new Error('request was cancelled'), null);
-    this._message(8, [index, offset, length], null);
+    this._message(MessageFlags.Cancel, [index, offset, length], null);
   }
 
   /**
@@ -456,7 +462,7 @@ export class Wire extends stream.Duplex {
       const extId = Buffer.from([ext]);
       const buf = Buffer.isBuffer(obj) ? obj : bencode.encode(obj);
 
-      this._message(20, [], Buffer.concat([extId, buf]));
+      this._message(MessageFlags.Extended, [], Buffer.concat([extId, buf]));
     } else {
       throw new Error(`Unrecognized extension: ${ext}`);
     }
@@ -630,7 +636,11 @@ export class Wire extends stream.Duplex {
       await Promise.all(extensionOnPieces);
 
       this._debug('got piece index=%d offset=%d', index, offset);
-      this._callback(this._pull(this.requests, index, offset, buffer.length), null, buffer);
+
+      const resolvedRequest = this._pull(this.requests, index, offset, buffer.length);
+      this._debug('got resolved request for index=%d offset=%d', index, offset, resolvedRequest);
+
+      this._callback(resolvedRequest, null, buffer);
       this.downloaded += buffer.length;
       this.downloadSpeed(buffer.length);
       this.emit('download', buffer.length);
@@ -757,7 +767,12 @@ export class Wire extends stream.Duplex {
   }
 
   private _callback(request: PieceRequest | null | undefined, err: Error | null | undefined, buffer: Buffer | null | undefined) {
-    if (!request) return;
+    this._debug('calling request callback', request);
+
+    if (!request) {
+      this._debug('No request was specified');
+      return;
+    }
 
     this._clearTimeout();
 
@@ -932,6 +947,15 @@ export class Wire extends stream.Duplex {
     debug(`[${Date.now()}][${this._debugId}]`, ...args);
   }
 
+  /**
+   * Retrieves the first entity from the requests array that matches the index, offset and length given.
+   *
+   * Often used in conjunction with _callback to call back to waiting piece requests
+   * @param requests
+   * @param pieceIdx
+   * @param offset
+   * @param length
+   */
   private _pull(requests: PieceRequest[], pieceIdx: number, offset: number, length: number) {
     for (let i = 0; i < requests.length; i++) {
       const req = requests[i];
