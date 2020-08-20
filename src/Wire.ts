@@ -8,7 +8,7 @@ import stream from 'readable-stream';
 import { ExtendedHandshake } from './Extension';
 import { MessageBuffers, MessageFlags, MessageParams } from './models/PeerMessages';
 import { IExtension } from './models/IExtension';
-import { PieceRequest } from './models/PieceRequest';
+import { PieceRequest, RequestCallback } from './models/PieceRequest';
 
 const debug = debugNs('firaenix-bittorrent-protocol');
 
@@ -381,19 +381,19 @@ export class Wire extends stream.Duplex {
    * @param  {number}   length
    * @param  {function} cb
    */
-  public request(index: number, offset: number, length: number, cb: Function) {
+  public request(index: number, offset: number, length: number, cb: RequestCallback) {
     if (!cb) cb = () => {};
     if (this._finished) {
-      return cb(new Error('wire is closed'));
+      return cb(new Error('wire is closed'), undefined);
     }
     if (this.peerChoking) {
-      return cb(new Error('peer is choking'));
+      return cb(new Error('peer is choking'), undefined);
     }
     if (this._handshakeSuccess === false) {
-      return cb(new Error(`peer hasn't finished handshaking`));
+      return cb(new Error(`peer hasn't finished handshaking`), undefined);
     }
     if (this._nextExt > 1 && this._extendedHandshakeSuccess === false) {
-      return cb(new Error(`peer hasn't finished extended handshaking`));
+      return cb(new Error(`peer hasn't finished extended handshaking`), undefined);
     }
 
     this._debug('request index=%d offset=%d length=%d', index, offset, length);
