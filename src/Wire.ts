@@ -595,11 +595,23 @@ export class Wire extends stream.Duplex {
 
     this._debug('Extensions have resolved');
 
-    const respond = (err, buffer) => {
+    const respond: RequestCallback = (err, buffer) => {
       // below request var gets hoisted above this function.
       // eslint-disable-next-line @typescript-eslint/no-use-before-define
-      if (request !== this._pull(this.peerRequests, index, offset, length)) return;
-      if (err) return this._debug('error satisfying request index=%d offset=%d length=%d (%s)', index, offset, length, err.message);
+      if (request !== this._pull(this.peerRequests, index, offset, length)) {
+        return;
+      }
+
+      if (err) {
+        this._debug('error satisfying request index=%d offset=%d length=%d (%s)', index, offset, length, err.message);
+        return;
+      }
+
+      if (buffer === null || buffer === undefined) {
+        this._debug('the requested piece has no buffer associated with it, return empty buffer index=%d offset=%d length=%d (%s)', index, offset, length);
+        buffer = Buffer.alloc(0);
+      }
+
       this.piece(index, offset, buffer);
     };
 
@@ -747,7 +759,9 @@ export class Wire extends stream.Duplex {
 
     this._clearTimeout();
 
-    if (!this.peerChoking && !this._finished) this._updateTimeout();
+    if (!this.peerChoking && !this._finished) {
+      this._updateTimeout();
+    }
     request.callback(err, buffer);
   }
 
