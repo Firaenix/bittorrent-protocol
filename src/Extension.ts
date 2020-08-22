@@ -38,7 +38,7 @@ export abstract class Extension implements IExtension {
   public abstract onMessage: (buf: Buffer) => void;
 }
 
-export abstract class EventExtension<T extends ListenerSignature<never>> extends TypedEmitter<T> implements IExtension {
+export abstract class EventExtension<T> extends TypedEmitter<ListenerSignature<T>> implements IExtension {
   public wire: Wire;
   public abstract name: string;
   public abstract requirePeer?: boolean;
