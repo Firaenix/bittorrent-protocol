@@ -1,6 +1,7 @@
 import Wire from '../src/Wire';
 import test from 'tape';
-import { Extension, HandshakeExtensions, ExtendedHandshake } from '../src/Extension';
+import { Extension, HandshakeExtensions, ExtendedHandshake, EventExtension } from '../src/Extension';
+import bencode from 'bencode';
 
 test('Extension.prototype.name', (t) => {
   t.plan(2);
@@ -166,6 +167,111 @@ test('Extension.onMessage', (t) => {
   wire.once('extended', () => {
     wire.extended('test_extension', Buffer.from('hello world!'));
   });
+});
+
+test('Back and forth communication between wire extensions.', (t) => {
+  t.plan(4);
+
+  class TestExtension extends EventExtension<any> {
+    public name = 'test_extension';
+    public requirePeer = false;
+
+    private pongCounter = 0;
+
+    public onMessage = (message: any): void => {
+      const decoded: Buffer[] = bencode.decode(message);
+      const [flag, ...rest] = decoded;
+
+      switch (flag.toString()) {
+        case 'ping':
+          return this.onPing();
+        case 'pong':
+          return this.onPong();
+        default:
+          t.fail('Extension recieved unknown message');
+          return;
+      }
+    };
+
+    public onRequest = async (index: number, offset: number, length: number): Promise<void> =>
+      new Promise((resolve, reject) => {
+        // Ping pong back and forth 3 times and then continu
+
+        this.on('done', () => {
+          resolve();
+        });
+
+        this.sendExtendedMessage(['ping']);
+      });
+
+    public onPing = () => {
+      this.sendExtendedMessage(['pong']);
+    };
+
+    public onPong = () => {
+      t.ok(true, 'got pong');
+      this.emit('pong');
+
+      this.pongCounter++;
+      if (this.pongCounter >= 3) {
+        // return resolve();
+        this.emit('done');
+        return;
+      }
+
+      this.sendExtendedMessage(['ping']);
+    };
+
+    public onHandshake: (infoHash: string, peerId: string, extensions: HandshakeExtensions) => void;
+    public onExtendedHandshake: (handshake: ExtendedHandshake) => void;
+  }
+
+  const outWire = new Wire('outWire'); // outgoing
+  const inWire = new Wire('inWire'); // outgoing
+  outWire.on('error', (err) => {
+    t.fail(err);
+  });
+
+  inWire.on('error', (err) => {
+    t.fail(err);
+  });
+
+  outWire.pipe(inWire).pipe(outWire);
+
+  outWire.use((w) => new TestExtension(w));
+  inWire.use((w) => new TestExtension(w));
+
+  outWire.on('request', (index, offset, length) => {
+    outWire.piece(0, 0, Buffer.alloc(0));
+  });
+
+  (inWire as any).test_extension.on('done', () => {
+    t.ok(true);
+  });
+
+  (outWire as any).test_extension.on('done', () => {
+    t.ok(true);
+  });
+
+  outWire.once('unchoke', () => {
+    outWire.request(0, 0, 0, (err, buf) => {
+      if (err) {
+        return t.fail(err.message);
+      }
+
+      t.ok(buf, 'We do get a buffer back');
+    });
+  });
+
+  inWire.on('extended', () => {
+    inWire.unchoke();
+  });
+
+  inWire.on('handshake', () => {
+    inWire.handshake('3031323334353637383930313233343536373839', '3132333435363738393031323334353637383930');
+  });
+
+  outWire.handshake('3031323334353637383930313233343536373839', '3132333435363738393031323334353637383930', undefined);
 });
 
 test('Throws error when connection not finished handshake if piece requested', (t) => {

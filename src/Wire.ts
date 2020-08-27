@@ -9,6 +9,10 @@ import { ExtendedHandshake } from './Extension';
 import { MessageBuffers, MessageFlags, MessageParams } from './models/PeerMessages';
 import { IExtension } from './models/IExtension';
 import { PieceRequest, RequestCallback } from './models/PieceRequest';
+import { ParseRequest } from './models/ParseRequest';
+import { waitForDebugger } from 'inspector';
+import { wait } from './utils/wait';
+import { parse } from 'path';
 
 const debug = debugNs('firaenix-bittorrent-protocol');
 
@@ -48,10 +52,11 @@ export class Wire extends stream.Duplex {
   public _timeoutMs: number;
   public destroyed: boolean;
   public _finished: boolean;
-  public _parserSize: number;
-  public _parser: ((buf: Buffer) => unknown) | null;
-  public _buffer: Buffer[];
-  public _bufferSize: number;
+
+  public _parseRequests: Array<ParseRequest> = [];
+
+  public _buffer: Buffer;
+
   public _timeoutUnref: unknown;
   public _handshakeSent: boolean;
   public _extendedHandshakeSent: boolean;
@@ -110,11 +115,7 @@ export class Wire extends stream.Duplex {
     this.destroyed = false; // was the wire ended by calling `destroy`?
     this._finished = false;
 
-    this._parserSize = 0; // number of needed bytes to parse next message from remote peer
-    this._parser = null; // function to call once `this._parserSize` bytes are available
-
-    this._buffer = []; // incomplete message data
-    this._bufferSize = 0; // cached total length of buffers in `this._buffer`
+    this._buffer = Buffer.alloc(0); // incomplete message data
 
     this.once('finish', () => this._onFinish());
 
@@ -517,8 +518,7 @@ export class Wire extends stream.Duplex {
 
     this.emit('handshake', infoHash, peerId, extensions);
 
-    let name;
-    for (name in this._ext) {
+    for (const name in this._ext) {
       this._ext[name].onHandshake(infoHash, peerId, extensions);
     }
 
@@ -707,13 +707,12 @@ export class Wire extends stream.Duplex {
       }
     }
 
-    let name;
     if (typeof info.m === 'object') {
-      for (name in info.m) {
+      for (const name in info.m) {
         this.peerExtendedMapping[name] = Number(info.m[name].toString());
       }
     }
-    for (name in this._ext) {
+    for (const name in this._ext) {
       if (this.peerExtendedMapping[name]) {
         this._ext[name].onExtendedHandshake(this.peerExtendedHandshake);
       }
@@ -749,22 +748,37 @@ export class Wire extends stream.Duplex {
    * @param  {function} cb
    */
   _write(data: Buffer, encoding: string, cb: (e: any) => void) {
-    this._bufferSize += data.length;
-    this._buffer.push(data);
-    this._debug('Data pushing', data, this._bufferSize);
+    this._buffer = Buffer.concat([this._buffer, data]);
 
-    while (this._bufferSize >= this._parserSize) {
-      const buffer = this._buffer.length === 1 ? this._buffer[0] : Buffer.concat(this._buffer);
-      this._bufferSize -= this._parserSize;
-      this._buffer = this._bufferSize ? [buffer.slice(this._parserSize)] : [];
-      if (this._parser) {
-        this._debug('has parser sending', this._parserSize, buffer);
-        this._parser(buffer.slice(0, this._parserSize));
-      }
+    this._debug('Data pushing', data, data.length);
+
+    this.parseStream();
+
+    // Keep collecting data for the next request
+    cb(null);
+  }
+
+  private parseStream = () => {
+    const parser = this._parseRequests.shift();
+    while (!parser) {
+      this._debug('Waiting for parser');
+      return;
     }
 
-    cb(null); // Signal that we're ready for more data
-  }
+    this._debug('Waiting for', parser?.parserSize, 'bytes for', parser?.parserName);
+
+    if (this._buffer.length < parser?.parserSize) {
+      this._parseRequests.unshift(parser);
+      return;
+    }
+
+    const buffer = this._buffer.slice(0, parser?.parserSize);
+    this._buffer = this._buffer.slice(parser?.parserSize);
+
+    this._debug('Sending', parser.parserName, parser?.parserSize, 'bytes');
+    parser?.callback(buffer);
+    return this.parseStream();
+  };
 
   private _callback(request: PieceRequest | null | undefined, err: Error | null | undefined, buffer: Buffer | null | undefined) {
     this._debug('calling request callback', request);
@@ -803,46 +817,32 @@ export class Wire extends stream.Duplex {
    * @param  {number} size
    * @param  {function} parser
    */
-  private _parse(size: number, parser: (buf: Buffer) => void) {
-    this._parserSize = size;
-    this._parser = parser;
+  private _parse(size: number, name: string, parser: (buf: Buffer) => void) {
+    this._parseRequests.push(new ParseRequest(size, name, parser));
+    this._debug('Parse Requests in queue: ', this._parseRequests.length);
   }
-
-  /**
-   * Takes a number of bytes that the local peer is waiting to receive from the remote peer
-   * in order to parse a complete message, and a callback function to be called once enough
-   * bytes have arrived.
-   * @param  {number} size
-   */
-  private _parseAsync = (size: number) =>
-    new Promise<Buffer>((resolve) => {
-      this._parse(size, (buf) => {
-        resolve(buf);
-        // this._parser = null;
-      });
-    });
 
   /**
    * Handle the first 4 bytes of a message, to determine the length of bytes that must be
    * waited for in order to have the whole message.
    * @param  {Buffer} buffer
    */
-  private _onMessageLength(buffer: Buffer) {
+  private _onMessageLength = (buffer: Buffer) => {
     const length = buffer.readUInt32BE(0);
     if (length > 0) {
-      this._parse(length, this._onMessage);
+      this._parse(length, 'onMessage', this._onMessage);
     } else {
       this._onKeepAlive();
-      this._parse(4, this._onMessageLength);
+      this._parse(4, 'onMessageLength', this._onMessageLength);
     }
-  }
+  };
 
   /**
    * Handle a message from the remote peer.
    * @param  {Buffer} buffer
    */
-  private async _onMessage(buffer: Buffer) {
-    this._parse(4, this._onMessageLength);
+  private _onMessage = async (buffer: Buffer) => {
+    this._parse(4, '_onMessage.onMessageLength', this._onMessageLength);
     const messageFlag: MessageFlags = buffer[0];
 
     switch (messageFlag) {
@@ -872,14 +872,14 @@ export class Wire extends stream.Duplex {
         this._debug('got unknown message');
         return this.emit('unknownmessage', buffer);
     }
-  }
+  };
 
   private _parseHandshake() {
-    this._parse(1, (bittorrentProtocolIdent) => {
+    this._parse(1, 'getBittorrentProtocolIdentifier', (bittorrentProtocolIdent) => {
       const protocolStringLength = bittorrentProtocolIdent.readUInt8(0);
       this._debug('Is start of Bittorrent Protocol?', protocolStringLength === MessageBuffers.MESSAGE_PROTOCOL[0], bittorrentProtocolIdent.toString());
 
-      this._parse(protocolStringLength, (handshake) => {
+      this._parse(protocolStringLength, 'getHandshake', (handshake) => {
         this._debug('HANDSHAKE BUFFER', handshake.toString(), handshake);
         const protocol = handshake.slice(0, protocolStringLength);
 
@@ -890,24 +890,24 @@ export class Wire extends stream.Duplex {
         }
 
         // GET RESERVED
-        this._parse(MessageBuffers.MESSAGE_RESERVED.length, (reservedFlags) => {
+        this._parse(MessageBuffers.MESSAGE_RESERVED.length, 'getReserved', (reservedFlags) => {
           this._debug('Reserved flags', reservedFlags);
           const dht = !!(reservedFlags[7] & 0x01); // see bep_0005
           const extended = !!(reservedFlags[5] & 0x10); // see bep_0010
 
-          this._parse(MessageParams.INFOHASH_SIZE_LENGTH, (infoHashSizeBuf) => {
+          this._parse(MessageParams.INFOHASH_SIZE_LENGTH, 'getInfoHashSizeBuf', (infoHashSizeBuf) => {
             this._debug('infoHashSizeBuf', infoHashSizeBuf);
             const infoHashSize = infoHashSizeBuf.readUInt8(0);
             this._debug('InfoHash Size:', infoHashSize);
 
             // Make sure that the following character is :
-            this._parse(MessageBuffers.INFOHASH_SPLIT.length, (colonChar) => {
+            this._parse(MessageBuffers.INFOHASH_SPLIT.length, 'getColonSeparator', (colonChar) => {
               if (!colonChar.equals(MessageBuffers.INFOHASH_SPLIT)) {
                 throw new Error('Invalid handshake, must be infohash_size:infohash. Missing colon');
               }
 
               // Infohash size + peerId size
-              this._parse(infoHashSize + MessageParams.PEER_ID_LENGTH, (infoHashAndPeerId) => {
+              this._parse(infoHashSize + MessageParams.PEER_ID_LENGTH, 'getPeerIdLength', (infoHashAndPeerId) => {
                 // handshake = handshake.slice(pstrlen);
 
                 this._onHandshake(infoHashAndPeerId.slice(0, infoHashSize), infoHashAndPeerId.slice(infoHashSize, infoHashSize + MessageParams.PEER_ID_LENGTH), {
@@ -915,7 +915,7 @@ export class Wire extends stream.Duplex {
                   extended
                 });
 
-                this._parse(4, this._onMessageLength);
+                this._parse(4, '_parseHandshake.getMessageLength', this._onMessageLength);
               });
             });
           });
@@ -934,7 +934,7 @@ export class Wire extends stream.Duplex {
     while (this.read()) {} // consume and discard the rest of the stream data
 
     clearInterval(this._keepAliveInterval as number);
-    this._parse(Number.MAX_VALUE, () => {});
+    this._parse(Number.MAX_VALUE, 'dispose', () => {});
     while (this.peerRequests.length) {
       this.peerRequests.pop();
     }

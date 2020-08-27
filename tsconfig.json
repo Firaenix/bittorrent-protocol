@@ -7,7 +7,7 @@
     "declarationDir": "./lib",
 
     "sourceMap": false,
-    "target": "es5",
+    "target": "ESNext",
     "moduleResolution": "node",
     "module": "commonjs",
     "esModuleInterop": true,
