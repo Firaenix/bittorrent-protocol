@@ -10,16 +10,14 @@ import { MessageBuffers, MessageFlags, MessageParams } from './models/PeerMessag
 import { IExtension } from './models/IExtension';
 import { PieceRequest, RequestCallback } from './models/PieceRequest';
 import { ParseRequest } from './models/ParseRequest';
-import { waitForDebugger } from 'inspector';
-import { wait } from './utils/wait';
-import { parse } from 'path';
+import { TypedEmitter } from 'tiny-typed-emitter';
+import { WireEvents } from './models/WireEvents';
+import { ExtensionsMap } from './models/ExtensionsMap';
 
 const debug = debugNs('firaenix-bittorrent-protocol');
 
 const BITFIELD_GROW = 400000;
 const KEEP_ALIVE_TIMEOUT = 55000;
-
-export type ExtensionsMap = { [x: string]: boolean; dht: boolean; extended: boolean };
 
 export class Wire extends stream.Duplex {
   public _debugId: string;
@@ -120,6 +118,21 @@ export class Wire extends stream.Duplex {
     this.once('finish', () => this._onFinish());
 
     this._parseHandshake();
+  }
+
+  public once<U extends keyof WireEvents>(event: U, listener: WireEvents[U]): this {
+    return super.once(event, listener);
+  }
+
+  public on<U extends keyof WireEvents>(event: U, listener: WireEvents[U]): this {
+    return super.on(event, listener);
+  }
+
+  public off<U extends keyof WireEvents>(event: U, listener: WireEvents[U]): this {
+    return super.off(event, listener);
+  }
+  public emit<U extends keyof WireEvents>(event: U, ...args: Parameters<WireEvents[U]>): boolean {
+    return super.emit(event, ...args);
   }
 
   /**
@@ -661,7 +674,7 @@ export class Wire extends stream.Duplex {
     this.emit('cancel', index, offset, length);
   }
 
-  private _onPort(port): void {
+  private _onPort(port: number): void {
     this._debug('got port %d', port);
     this.emit('port', port);
   }
@@ -680,7 +693,7 @@ export class Wire extends stream.Duplex {
     // there is an registered extension handler, so call it
     this._ext[extensionName].onMessage(buf);
     this._debug('got extended message ext=%s', extensionName);
-    this.emit('extended', extensionName, buf);
+    this.emit('extension_message', extensionName, buf);
   }
 
   private onExtendedHandshake(buf: Buffer) {
@@ -702,7 +715,7 @@ export class Wire extends stream.Duplex {
       if (this._ext[name] && this._ext[name].requirePeer && !this.peerExtendedHandshake.m?.[name]) {
         this._debug('Destroying connection, peer doesnt have same extension.', name);
         this.destroy();
-        this.emit('missing_extension', `Connected peer did not have the same extension: ${name}`);
+        this.emit('missing_extension', name);
         return;
       }
     }
@@ -718,7 +731,7 @@ export class Wire extends stream.Duplex {
       }
     }
     this._debug('got extended handshake');
-    this.emit('extended', 'handshake', this.peerExtendedHandshake);
+    this.emit('extended_handshake', 'handshake', this.peerExtendedHandshake);
     this._extendedHandshakeSuccess = true;
   }
 
@@ -870,7 +883,7 @@ export class Wire extends stream.Duplex {
         return this._onExtended(buffer.readUInt8(1), buffer.slice(2));
       default:
         this._debug('got unknown message');
-        return this.emit('unknownmessage', buffer);
+        return this.emit('unknown_message', buffer);
     }
   };
 
