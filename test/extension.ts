@@ -55,7 +55,7 @@ test('Extension.onHandshake', (t) => {
   const wire = new Wire();
 
   wire.on('error', (err) => {
-    t.fail(err);
+    t.fail(err.message);
   });
   wire.pipe(wire);
 
@@ -92,7 +92,7 @@ test('Extension.onExtendedHandshake', (t) => {
 
   const wire = new Wire(); // incoming
   wire.on('error', (err) => {
-    t.fail(err);
+    t.fail(err.message);
   });
   wire.pipe(wire);
 
@@ -133,7 +133,7 @@ test('Wire destroyed on Extension with requirePeer true', (t) => {
 
   incomingWire.on('missing_extension', (reason: string) => {
     t.true(incomingWire.destroy);
-    t.equals(reason, `Connected peer did not have the same extension: test_extension`);
+    t.equals(reason, `test_extension`);
   });
 
   outgoingWire.handshake('3031323334353637383930313233343536373839', '3132333435363738393031323334353637383930');
@@ -156,7 +156,7 @@ test('Extension.onMessage', (t) => {
 
   const wire = new Wire(); // outgoing
   wire.on('error', (err) => {
-    t.fail(err);
+    t.fail(err.message);
   });
   wire.pipe(wire);
 
@@ -164,7 +164,7 @@ test('Extension.onMessage', (t) => {
 
   wire.handshake('3031323334353637383930313233343536373839', '3132333435363738393031323334353637383930', undefined);
 
-  wire.once('extended', () => {
+  wire.once('extended_handshake', () => {
     wire.extended('test_extension', Buffer.from('hello world!'));
   });
 });
@@ -229,11 +229,11 @@ test('Back and forth communication between wire extensions.', (t) => {
   const outWire = new Wire('outWire'); // outgoing
   const inWire = new Wire('inWire'); // outgoing
   outWire.on('error', (err) => {
-    t.fail(err);
+    t.fail(err.message);
   });
 
   inWire.on('error', (err) => {
-    t.fail(err);
+    t.fail(err.message);
   });
 
   outWire.pipe(inWire).pipe(outWire);
@@ -263,7 +263,7 @@ test('Back and forth communication between wire extensions.', (t) => {
     });
   });
 
-  inWire.on('extended', () => {
+  inWire.on('extended_handshake', () => {
     inWire.unchoke();
   });
 
@@ -279,7 +279,7 @@ test('Throws error when connection not finished handshake if piece requested', (
 
   const wire = new Wire();
   wire.on('error', (err) => {
-    t.fail(err);
+    t.fail(err.message);
   });
   wire.pipe(wire);
   wire.handshake(Buffer.from('01234567890123456789'), Buffer.from('12345678901234567890'));

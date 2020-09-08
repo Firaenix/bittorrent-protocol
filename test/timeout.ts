@@ -8,7 +8,7 @@ test('Timeout when peer does not respond', (t) => {
 
   const wire = new Protocol();
   wire.on('error', (err) => {
-    t.fail(err);
+    t.fail(err.message);
   });
   wire.pipe(wire);
   wire.setTimeout(1000);

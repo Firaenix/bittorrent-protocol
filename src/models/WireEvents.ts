@@ -29,4 +29,6 @@ export interface WireEvents {
   extended_handshake: (message: 'handshake', extendedHandshake: ExtendedHandshake) => void;
   timeout: () => void;
   unknown_message: (message: Buffer) => void;
+
+  end: () => void;
 }

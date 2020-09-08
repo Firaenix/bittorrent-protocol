@@ -26,14 +26,14 @@ test('recieve callback when request for piece resolves', { timeout: 5000 }, (t) 
     });
   });
 
-  wire1.on('extended', () => {
+  wire1.on('extended_handshake', () => {
     // wire1.unchoke();
     console.log('wire 1 extended');
 
     // wire1.handshake(Buffer.from('asdkjashdjkasd'), Buffer.from('10101010101010111001'));
   });
 
-  wire2.on('extended', () => {
+  wire2.on('extended_handshake', () => {
     wire2.unchoke();
     console.log('wire 2 extended');
   });

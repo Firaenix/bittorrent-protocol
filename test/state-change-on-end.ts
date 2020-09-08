@@ -6,7 +6,7 @@ test("State changes correctly on wire 'end'", (t) => {
 
   const wire = new Protocol();
   wire.on('error', (err) => {
-    t.fail(err);
+    t.fail(err.message);
   });
   wire.pipe(wire);
 

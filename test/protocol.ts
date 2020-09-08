@@ -6,7 +6,7 @@ test('Handshake', (t) => {
 
   const wire = new Protocol();
   wire.on('error', (err) => {
-    t.fail(err);
+    t.fail(err.message);
   });
   wire.pipe(wire);
 
@@ -25,7 +25,7 @@ test('Handshake (with string args)', (t) => {
 
   const wire = new Protocol();
   wire.on('error', (err) => {
-    t.fail(err);
+    t.fail(err.message);
   });
   wire.pipe(wire);
 
@@ -46,10 +46,10 @@ test('Asynchronous handshake + extended handshake', (t) => {
   const wire2 = new Protocol(); // incoming
   wire1.pipe(wire2).pipe(wire1);
   wire1.on('error', (err) => {
-    t.fail(err);
+    t.fail(err.message);
   });
   wire2.on('error', (err) => {
-    t.fail(err);
+    t.fail(err.message);
   });
 
   wire1.on('handshake', (infoHash, peerId, extensions) => {
@@ -58,7 +58,7 @@ test('Asynchronous handshake + extended handshake', (t) => {
     t.equal(Buffer.from(peerId, 'hex').toString(), '12345678901234567890');
     t.equal(extensions.extended, true);
   });
-  wire1.on('extended', (ext, obj) => {
+  wire1.on('extended_handshake', (ext, obj) => {
     if (ext === 'handshake') {
       eventLog.push('w1 ex');
       t.ok(obj);
@@ -80,7 +80,7 @@ test('Asynchronous handshake + extended handshake', (t) => {
       wire2.handshake(infoHash, peerId);
     });
   });
-  wire2.on('extended', (ext, obj) => {
+  wire2.on('extended_handshake', (ext, obj) => {
     if (ext === 'handshake') {
       eventLog.push('w2 ex');
       t.ok(obj);
@@ -95,7 +95,7 @@ test('Unchoke', (t) => {
 
   const wire = new Protocol();
   wire.on('error', (err) => {
-    t.fail(err);
+    t.fail(err.message);
   });
   wire.pipe(wire);
   wire.handshake(Buffer.from('01234567890123456789'), Buffer.from('12345678901234567890'));
@@ -116,7 +116,7 @@ test('Interested', (t) => {
 
   const wire = new Protocol();
   wire.on('error', (err) => {
-    t.fail(err);
+    t.fail(err.message);
   });
   wire.pipe(wire);
   wire.handshake(Buffer.from('01234567890123456789'), Buffer.from('12345678901234567890'));
@@ -137,7 +137,7 @@ test('Request a piece', (t) => {
 
   const wire = new Protocol();
   wire.on('error', (err) => {
-    t.fail(err);
+    t.fail(err.message);
   });
   wire.pipe(wire);
   wire.handshake(Buffer.from('01234567890123456789'), Buffer.from('12345678901234567890'));
@@ -158,7 +158,7 @@ test('Request a piece', (t) => {
     t.equal(wire.requests.length, 0);
     wire.request(0, 1, 11, (err, buffer) => {
       t.equal(wire.requests.length, 0);
-      t.ok(!err);
+      t.ok(!err || !err.message);
       t.ok(buffer);
       t.equal(buffer?.toString(), 'hello world');
     });
@@ -173,7 +173,7 @@ test('No duplicate `have` events for same piece', (t) => {
 
   const wire = new Protocol();
   wire.on('error', (err) => {
-    t.fail(err);
+    t.fail(err.message);
   });
   wire.pipe(wire);
 
